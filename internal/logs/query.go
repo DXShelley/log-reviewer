@@ -321,19 +321,20 @@ func Summarize(r *Report, f Filter) ([]*Group, error) {
 }
 
 type Detail struct {
-	ContextLine      uint64 `json:"context_line,omitempty"`
-	ContextText      string `json:"context_text,omitempty"`
-	ContextTruncated bool   `json:"context_truncated,omitempty"`
-	GroupID          string `json:"group_id"`
-	Source           string `json:"source"`
-	Offset           uint64 `json:"offset"`
-	Length           uint64 `json:"length"`
-	Line             uint64 `json:"line"`
-	Time             string `json:"time"`
-	Text             string `json:"text"`
-	Before           string `json:"before"`
-	After            string `json:"after"`
-	Truncated        bool   `json:"truncated"`
+	Remote           *RemoteSource `json:"remote,omitempty"`
+	ContextLine      uint64        `json:"context_line,omitempty"`
+	ContextText      string        `json:"context_text,omitempty"`
+	ContextTruncated bool          `json:"context_truncated,omitempty"`
+	GroupID          string        `json:"group_id"`
+	Source           string        `json:"source"`
+	Offset           uint64        `json:"offset"`
+	Length           uint64        `json:"length"`
+	Line             uint64        `json:"line"`
+	Time             string        `json:"time"`
+	Text             string        `json:"text"`
+	Before           string        `json:"before"`
+	After            string        `json:"after"`
+	Truncated        bool          `json:"truncated"`
 }
 
 type ContextOptions struct {
@@ -349,7 +350,7 @@ func ReadDetail(r *Report, rec Record, g *Group, options ...ContextOptions) (Det
 	if context.Before < 0 || context.After < 0 || context.Before > 10000 || context.After > 10000 {
 		return Detail{}, errors.New("context lines must be between 0 and 10000")
 	}
-	d := Detail{GroupID: g.ID, Source: r.Sources[rec.Source].Path, Offset: rec.Offset, Length: rec.Length, Line: rec.Line, Time: stamp(rec.Time)}
+	d := Detail{GroupID: g.ID, Source: r.Sources[rec.Source].Path, Remote: r.Sources[rec.Source].Remote, Offset: rec.Offset, Length: rec.Length, Line: rec.Line, Time: stamp(rec.Time)}
 	f, err := validatedFile(r, rec.Source)
 	if err != nil {
 		return d, err

@@ -20,10 +20,13 @@ import (
 	"log-reviewer/internal/server"
 )
 
-const version = "0.4.0"
+const version = "0.5.0"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return
+		}
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
@@ -37,6 +40,8 @@ func run(args []string) error {
 		return gui(args[1:])
 	case "analyze":
 		return analyze(args[1:])
+	case "fetch":
+		return fetch(args[1:])
 	case "languages":
 		r, err := logs.BuiltinLanguages()
 		if err != nil {
@@ -58,13 +63,16 @@ func run(args []string) error {
 	}
 }
 
-const help = `Log Reviewer 0.4.0 - local, streaming log classification
+const help = `Log Reviewer 0.5.0 - local, streaming log classification
 
   log-reviewer                              Open local GUI
   log-reviewer gui [--host 0.0.0.0] [--port 8765] [--no-browser] [files...]
     [--allowed-hosts logs.example.com] [--cache-dir directory] [--rule-dir directory]
   log-reviewer analyze [--out report.json] [--all] [--rules rules.json] files...
   log-reviewer languages                     Export built-in language rules as JSON
+  log-reviewer fetch --host SERVER --user USER --path PATH --key PRIVATE_KEY
+    [--fingerprint SHA256:...] [--known-hosts FILE] [--recursive] [--analyze]
+    [--out-dir remote-logs] [--pattern *.log,*.txt] [--max-files 1000] [--max-bytes 10737418240]
   log-reviewer analyze --language-rules languages.json [files...]
   log-reviewer query --report report.json [filters] [--details] [--offset 0] [--limit 20]
   log-reviewer export --report report.json [filters] [--out errors.txt]
@@ -74,7 +82,7 @@ Filters: --group ID --level ERROR|WARN|FATAL --keyword TEXT --regex PATTERN
 Context: --before 20 --after 100 (0-10000 lines, with query --details)
 All flags must precede positional file paths. Directory inputs include *.log, *.log.* and *.txt.
 Query emits JSON; export streams full occurrences. Regex matches physical lines.
-No network connection, account, or external runtime is required.
+Local analysis requires no network or external runtime. Optional fetch uses SFTP.
 `
 
 func rules(path string) ([]logs.Rule, error) {

@@ -1,0 +1,5 @@
+#remote-dialog{width:min(700px,96vw);max-height:90vh;overflow:auto}
+.remote-body{padding:16px 18px}.remote-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 16px}
+.remote-fields label{display:flex;flex-direction:column;gap:6px;font-size:12px;min-width:0}.remote-fields input,.remote-fields select,.remote-fields textarea{width:100%;min-width:0}.remote-wide{grid-column:1/-1}.remote-fields textarea{margin:0;font:12px/1.5 Consolas,monospace;resize:vertical}
+.remote-options{display:flex;flex-wrap:wrap;gap:16px;margin:16px 0;font-size:12px}.remote-status{font-size:12px;margin:12px 0;overflow-wrap:anywhere;white-space:pre-wrap}.remote-body progress{width:100%;height:8px}.remote-actions{display:flex;justify-content:flex-end;gap:8px}.remote-key-input{display:flex;gap:8px;align-items:center;font-size:12px;margin:10px 0}.remote-key-input input{min-width:0}
+@media(max-width:600px){.remote-fields{grid-template-columns:minmax(0,1fr)}.remote-body{padding:12px}.remote-key-input{flex-wrap:wrap}}

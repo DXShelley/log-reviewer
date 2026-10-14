@@ -21,12 +21,22 @@ const RecordSize = 40
 const maxPreview = 64 * 1024
 
 type Source struct {
-	Languages []string `json:"languages"`
-	Path      string   `json:"path"`
-	Size      int64    `json:"size"`
-	Modified  int64    `json:"modified"`
-	Lines     uint64   `json:"lines"`
-	Events    uint64   `json:"events"`
+	Remote    *RemoteSource `json:"remote,omitempty"`
+	Languages []string      `json:"languages"`
+	Path      string        `json:"path"`
+	Size      int64         `json:"size"`
+	Modified  int64         `json:"modified"`
+	Lines     uint64        `json:"lines"`
+	Events    uint64        `json:"events"`
+}
+type RemoteSource struct {
+	Modified   string `json:"modified,omitempty"`
+	Protocol   string `json:"protocol"`
+	Host       string `json:"host"`
+	Port       int    `json:"port"`
+	Path       string `json:"path"`
+	CapturedAt string `json:"captured_at"`
+	Changed    bool   `json:"changed"`
 }
 type Group struct {
 	Languages   []string   `json:"languages"`
@@ -76,10 +86,11 @@ type Progress struct {
 	Cancel atomic.Bool
 }
 type Options struct {
-	Languages []LanguageRule
-	All       bool
-	Rules     []Rule
-	Progress  *Progress
+	RemoteSources map[string]RemoteSource
+	Languages     []LanguageRule
+	All           bool
+	Rules         []Rule
+	Progress      *Progress
 }
 type Record struct {
 	Group, Source        uint32
@@ -209,13 +220,16 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 		}
 	}()
 	w := bufio.NewWriterSize(f, 1024*1024)
-report := &Report{Schema: "log-reviewer/v1", Version: "0.4.0", Created: time.Now().Format(time.RFC3339), Formats: map[string]uint64{}, Groups: []*Group{}, Sources: []Source{}, IndexPath: f.Name(), Notes: []string{"Impact is a heuristic based on log severity; business impact is not inferred.", "Scope lists observed files and logger/service names, not affected users.", "Local timestamps without offsets use the scanning machine's local timezone.", "Grouping masks numeric values and IDs; inspect occurrences before assuming identical causes."}}
+	report := &Report{Schema: "log-reviewer/v1", Version: "0.5.0", Created: time.Now().Format(time.RFC3339), Formats: map[string]uint64{}, Groups: []*Group{}, Sources: []Source{}, IndexPath: f.Name(), Notes: []string{"Impact is a heuristic based on log severity; business impact is not inferred.", "Scope lists observed files and logger/service names, not affected users.", "Local timestamps without offsets use the scanning machine's local timezone.", "Grouping masks numeric values and IDs; inspect occurrences before assuming identical causes."}}
 	for _, path := range paths {
 		st, err := os.Stat(path)
 		if err != nil {
 			return nil, err
 		}
 		report.Sources = append(report.Sources, Source{Path: path, Size: st.Size(), Modified: st.ModTime().UnixNano()})
+		if origin, ok := opt.RemoteSources[path]; ok {
+			report.Sources[len(report.Sources)-1].Remote = &origin
+		}
 		report.Bytes += st.Size()
 	}
 	if opt.Progress != nil {

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"embed"
@@ -33,10 +34,14 @@ type Server struct {
 	Report           *logs.Report
 	Progress         *logs.Progress
 	busy             bool
+	closing          bool
 	err              string
 	dir, token, addr string
 	uploads          map[string]string
 	allowedHosts     []string
+	remoteState      remoteState
+	remoteCancel     context.CancelFunc
+	remoteSources    map[string]logs.RemoteSource
 }
 
 func New(dir string) *Server {
@@ -44,7 +49,7 @@ func New(dir string) *Server {
 	if _, err := rand.Read(b); err != nil {
 		panic(err)
 	}
-	return &Server{dir: dir, token: hex.EncodeToString(b), uploads: map[string]string{}, rules: &logs.RuleStore{Dir: filepath.Join(dir, "rules")}}
+	return &Server{dir: dir, token: hex.EncodeToString(b), uploads: map[string]string{}, remoteSources: map[string]logs.RemoteSource{}, rules: &logs.RuleStore{Dir: filepath.Join(dir, "rules")}}
 }
 func (s *Server) Token() string { return s.token }
 func (s *Server) Handler(addr string) http.Handler {
@@ -62,6 +67,7 @@ func (s *Server) Handler(addr string) http.Handler {
 	m.HandleFunc("/api/browse", s.browse)
 	m.HandleFunc("/api/upload", s.upload)
 	m.HandleFunc("/api/language-rules", s.languageRules)
+	m.HandleFunc("/api/remote-fetch", s.remoteFetch)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -176,7 +182,11 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) Start(paths []string, all bool, rules []logs.Rule, languages ...logs.LanguageRule) error {
 	s.mu.Lock()
-	if s.busy {
+	if s.closing {
+		s.mu.Unlock()
+		return errors.New("server is closing")
+	}
+	if s.busy || s.remoteState.Busy {
 		s.mu.Unlock()
 		return errors.New("analysis already running")
 	}
@@ -191,10 +201,14 @@ func (s *Server) Start(paths []string, all bool, rules []logs.Rule, languages ..
 	s.err = ""
 	p := &logs.Progress{}
 	s.Progress = p
+	origins := make(map[string]logs.RemoteSource, len(s.remoteSources))
+	for path, origin := range s.remoteSources {
+		origins[path] = origin
+	}
 	s.mu.Unlock()
 	go func() {
 		defer s.jobs.Done()
-		r, err := logs.Analyze(paths, s.dir, logs.Options{All: all, Rules: rules, Languages: languages, Progress: p})
+		r, err := logs.Analyze(paths, s.dir, logs.Options{All: all, Rules: rules, Languages: languages, Progress: p, RemoteSources: origins})
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.busy = false
@@ -208,11 +222,15 @@ func (s *Server) Start(paths []string, all bool, rules []logs.Rule, languages ..
 	return nil
 }
 func (s *Server) Close() {
-	s.mu.RLock()
+	s.mu.Lock()
+	s.closing = true
+	if s.remoteCancel != nil {
+		s.remoteCancel()
+	}
 	if s.Progress != nil {
 		s.Progress.Cancel.Store(true)
 	}
-	s.mu.RUnlock()
+	s.mu.Unlock()
 	s.jobs.Wait()
 }
 func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
