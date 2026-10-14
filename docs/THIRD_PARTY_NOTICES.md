@@ -1,6 +1,13 @@
 # 第三方依赖许可
 
-SFTP 使用以下组件。分发二进制时请同时保留本文件。
+SFTP 与 GUI 使用以下组件。分发二进制时请同时保留本文件及 `docs/licenses/`。
+
+## GUI 组件
+
+- Highlight.js 11.11.1：BSD 3-Clause，离线精简核心及本项目的日志语法；完整许可见 [highlight.js-LICENSE.txt](licenses/highlight.js-LICENSE.txt)。
+- Lucide 0.468.0：ISC，选定图标，包含 Feather 的 MIT 来源说明；完整许可见 [lucide-LICENSE.txt](licenses/lucide-LICENSE.txt)。
+
+浏览器产物为 `internal/server/web/vendor/log-components.js`，通过 Go embed 内嵌，运行时无需 CDN、npm 或网络。`scripts/build-web-vendor.cjs` 使用 esbuild 对选定核心与图标进行 tree shaking，esbuild 仅为开发构建工具，不进入运行时。源码包取自公开 npm registry，固定版本；库升级时重新构建并复验日志原文、HTML 转义和显示性能。
 
 ## github.com/pkg/sftp v1.13.11
 

@@ -1,6 +1,6 @@
 # Log Reviewer
 
-v0.6.0 新增六种布局、折叠事件与按需读取、总体/单条上下文、日志全屏、拖放反馈、多文件时间片段导出，以及 `.ssh/known_hosts` 自动读取。详见 [工作区与时间导出](docs/workspace-usage.md)。服务器访问见 [服务器说明](docs/server-usage.md)，独立语言规则管理见 [语言规则说明](docs/language-rules.md)。
+v0.7.0 增加离线 Highlight.js 日志着色、Lucide 图标、按功能分组的界面，以及基于堆栈与请求证据的自动上下文。布局选择移到右上角，单条手动上下文仍优先。详见 [工作区与时间导出](docs/workspace-usage.md)，验证见 [v0.7.0 记录](docs/VALIDATION-0.7.0.md)。
 
 实用、简洁的本地日志分类工具。单个二进制同时提供 terminal 和浏览器 GUI，无需安装运行时、数据库或日志平台。日志不会发送到云端。
 
@@ -10,7 +10,7 @@ v0.6.0 新增六种布局、折叠事件与按需读取、总体/单条上下文
 - [工作区与时间片段导出](docs/workspace-usage.md)：布局、折叠事件、上下文、全屏、多节点日志片段。
 - [服务器访问](docs/server-usage.md) / [SFTP 获取](docs/sftp-usage.md)：无 GUI 环境、监听地址、端口、远程日志与信任目录。
 - [独立语言识别规则](docs/language-rules.md) / [Agent API](docs/AGENT_API.md)：规则扩展、JSON 与 HTTP 接入。
-- [版本记录](docs/CHANGELOG.md) / [v0.6.0 验证](docs/VALIDATION-0.6.0.md) / [性能基准](docs/VALIDATION.md)。
+- [版本记录](docs/CHANGELOG.md) / [v0.7.0 验证](docs/VALIDATION-0.7.0.md) / [性能基准](docs/VALIDATION.md)。
 
 ## 直接使用
 
@@ -18,7 +18,7 @@ v0.6.0 新增六种布局、折叠事件与按需读取、总体/单条上下文
 
 “选择文件”支持跨目录勾选多个文件；“导入文件”支持一次选择多个文件，也支持拖入多个文件。“粘贴文本”可添加复制的日志内容，这些输入可以混合分析。
 
-Windows 双击 `dist/log-reviewer-windows-amd64.exe`，自动打开浏览器。选择分类后，事件默认折叠，点击摘要读取完整事件、堆栈与上下文。总体默认前 20、后 100 行，可设置为 0–10000 行并点“应用全部上下文”；单条事件可独立覆盖。关键字/正则以首次匹配行为中心，无文本搜索时以完整事件为中心。布局与总体设置保存在浏览器中。
+Windows 双击 `dist/log-reviewer-windows-amd64.exe`，自动打开浏览器。选择分类后，事件默认折叠，点击摘要读取完整事件、堆栈与上下文。GUI 默认启用自动上下文，总体前 20、后 100 行作为扫描上限，可设置为 0–10000 行；关闭自动模式则按指定行数读取。单条事件可独立覆盖。关键字/正则以首次匹配行为中心，无文本搜索时以完整事件为中心。布局与总体设置保存在浏览器中。
 
 Linux / macOS 使用对应平台的文件，先执行 `chmod +x log-reviewer-*`，然后运行。GUI 使用系统浏览器；terminal 在无图形环境中也可用。
 
@@ -31,6 +31,7 @@ Linux / macOS 使用对应平台的文件，先执行 `chmod +x log-reviewer-*`�
 .\dist\log-reviewer-windows-amd64.exe analyze --out report.json "D:\logs\*.log"
 .\dist\log-reviewer-windows-amd64.exe query --report report.json --level ERROR
 .\dist\log-reviewer-windows-amd64.exe query --report report.json --keyword "Connection refused" --details
+.\dist\log-reviewer-windows-amd64.exe query --report report.json --group <分类ID> --details --auto-context --before 20 --after 100
 .\dist\log-reviewer-windows-amd64.exe query --report report.json --from "2026-10-14T12:30:00+08:00" --to "2026-10-14T13:00:00+08:00"
 .\dist\log-reviewer-windows-amd64.exe export --report report.json --group <分类ID> --out errors.txt
 .\dist\log-reviewer-windows-amd64.exe export-time --report report.json --from "2026-10-14T12:30:00+08:00" --to "2026-10-14T12:35:00+08:00" --out nodes.txt
@@ -106,7 +107,9 @@ Linux / macOS 可运行 `sh scripts/build.sh`。产物覆盖 Windows / Linux / m
 
 GUI 自动验证：配置 `NODE_PATH` 指向已有 Playwright 包，运行 `node tests/gui-smoke.cjs`；连接 `127.0.0.1:9222` Chrome，创建独立浏览器 context。
 
-新版工作区验证运行 `node tests/ui-workspace.cjs`，覆盖拖放、六种布局、总体/单条上下文、全屏与时间片段导出。其他回归入口见 [项目状态](docs/PROJECT_STATUS.md)。
+新版工作区验证运行 `node tests/ui-workspace.cjs`；日志着色与自动上下文运行 `node tests/ui-design.cjs`，包含不可信日志转义、单条覆盖和多种屏幕宽度。其他回归入口见 [项目状态](docs/PROJECT_STATUS.md)。
+
+Highlight.js 与 Lucide 的精简浏览器组件已经提交并内嵌到二进制，日常 Go 构建无需 npm。仅更新组件时按锁定版本运行 `node scripts/build-web-vendor.cjs` 重新生成，见 [依赖许可](docs/THIRD_PARTY_NOTICES.md)。
 
 SFTP 端到端验证使用自带的本地测试服务器，不连接真实业务服务器：
 
