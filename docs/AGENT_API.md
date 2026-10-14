@@ -44,8 +44,9 @@ log-reviewer serve --no-browser --port 8765 --keep-cache
 | `GET /api/status` | busy、bytes、total、events、lines、error、ready；完成时附 report |
 | `POST /api/cancel` | 取消正在进行的分析 |
 | `GET /api/groups` | group、level、keyword、regex、from、to、source，返回筛选后的分类与次数 |
-| `GET /api/details` | 同上，另有 offset（默认 0）、limit（默认 20，上限 100）、before（默认 20）、after（默认 100），上下文行数范围 0–10000 |
+| `GET /api/details` | 同上，另有 offset（默认 0）、limit（默认 20，上限 100）、before（默认 20）、after（默认 100），上下文行数范围 0–10000；summary=1 仅返回摘要 |
 | `GET /api/export` | 同上，返回符合条件的完整原始事件文本 |
+| `GET /api/time-export` | from/to 必填，mode=merged 或 files，source 可选；返回原始时间片段文本或分文件 ZIP |
 | `GET /api/report` | 完整 JSON 报告 |
 | `GET /api/browse?path=...` | 本机文件选择；path=roots 列磁盘 / 根目录 |
 | `POST /api/upload?name=...` | body 为原始文件，返回 upload id；analyze 的 uploads 可引用该 ID |
@@ -64,9 +65,7 @@ SFTP POST 示例：`{"host":"192.168.1.20","port":22,"user":"logreader","passwor
 
 报告 sources[].remote 与详情 remote 可追溯服务器、端口、远程路径、获取时间和原始修改时间。changed=true 表示获取期间文件变化，不能把它当成强一致快照。CLI 可直接 fetch --analyze 输出同样的报告给 agent。详见 [SFTP 说明](sftp-usage.md)。
 
-## 推荐分析顺序
-
-### v0.6 工作区接口
+## 摘要与时间片段接口
 
 `GET /api/details?...&summary=1` 返回同样的分页结构，但 `text/before/after` 为空，仅读取索引和每条最多 4 KiB，用 `key` 返回可识别的请求 ID。通过同样的筛选条件、`offset` 和 `limit=1` 再获取正文；客户端应核对 `source/offset` 防止异步查询变化。
 
@@ -75,6 +74,10 @@ SFTP POST 示例：`{"host":"192.168.1.20","port":22,"user":"logreader","passwor
 SFTP 请求可增加 `ssh_dir`，未传指纹或 `known_hosts` 时自动读取该目录下的 `known_hosts`；省略目录使用工具运行账户的 `.ssh`。路径属于服务器本机，不属于 HTTP 客户端机器。
 
 CLI `export-time --report report.json --from TIME --to TIME --out FILE` 或 `--out-dir NEW_DIR`，便于 agent 提取多节点证据。边界与无时间日志限制见 [工作区说明](workspace-usage.md)。
+
+摘要中的 `key` 是可识别请求 ID 的原文，可能重复或缺省；不要把它当作唯一业务标识。可用 `source` 与字节 `offset` 联合定位事件，并保留报告、索引和稳定的源文件快照。
+
+## 推荐分析顺序
 
 1. analyze 输入的稳定日志快照，检查 exit code。
 2. 读取严重级别、高频类别、首次时间、root_cause 与来源分布。

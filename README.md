@@ -4,6 +4,14 @@ v0.6.0 新增六种布局、折叠事件与按需读取、总体/单条上下文
 
 实用、简洁的本地日志分类工具。单个二进制同时提供 terminal 和浏览器 GUI，无需安装运行时、数据库或日志平台。日志不会发送到云端。
 
+## 文档导航
+
+- [项目状态与维护入口](docs/PROJECT_STATUS.md)：当前交付、代码入口、验证与已知限制。
+- [工作区与时间片段导出](docs/workspace-usage.md)：布局、折叠事件、上下文、全屏、多节点日志片段。
+- [服务器访问](docs/server-usage.md) / [SFTP 获取](docs/sftp-usage.md)：无 GUI 环境、监听地址、端口、远程日志与信任目录。
+- [独立语言识别规则](docs/language-rules.md) / [Agent API](docs/AGENT_API.md)：规则扩展、JSON 与 HTTP 接入。
+- [版本记录](docs/CHANGELOG.md) / [v0.6.0 验证](docs/VALIDATION-0.6.0.md) / [性能基准](docs/VALIDATION.md)。
+
 ## 直接使用
 
 筛选区域提供关键字、正则、时间、文件范围的独立重置和全部重置。时间弹窗选择日期、时、分、秒后点“确认”提交，点“取消”保留原值。结束时间包含所选秒内的全部日志。GUI 使用浏览器所在时区；CLI 的无时区时间使用运行机器的本地时区。
@@ -25,7 +33,11 @@ Linux / macOS 使用对应平台的文件，先执行 `chmod +x log-reviewer-*`�
 .\dist\log-reviewer-windows-amd64.exe query --report report.json --keyword "Connection refused" --details
 .\dist\log-reviewer-windows-amd64.exe query --report report.json --from "2026-10-14T12:30:00+08:00" --to "2026-10-14T13:00:00+08:00"
 .\dist\log-reviewer-windows-amd64.exe export --report report.json --group <分类ID> --out errors.txt
+.\dist\log-reviewer-windows-amd64.exe export-time --report report.json --from "2026-10-14T12:30:00+08:00" --to "2026-10-14T12:35:00+08:00" --out nodes.txt
+.\dist\log-reviewer-windows-amd64.exe export-time --report report.json --from "2026-10-14T12:30:00+08:00" --to "2026-10-14T12:35:00+08:00" --out-dir nodes-period
 ```
+
+时间片段导出保留同一时段的普通日志与续行堆栈，按报告文件顺序合并或分别生成文件；不受 ERROR/WARN 分类、关键字和正则条件限制。`export-time` 的输出文件或目录必须尚不存在。GUI 分文件导出为 ZIP。
 
 所有参数放在文件路径之前。`analyze` / `query` 将 JSON 写入 stdout，提示和错误写入 stderr，错误时 exit code 为 1。指定目录时读取当前层 `.log`、`.log.*`、`.txt` 文件；也可直接指定任意扩展名的普通文本文件。重复路径自动去重。
 
@@ -51,7 +63,7 @@ Linux / macOS 使用对应平台的文件，先执行 `chmod +x log-reviewer-*`�
 
 ## 动态添加格式
 
-在 GUI「识别规则」中粘贴 JSON，或使用：
+GUI「识别规则」按语言分别列出，可编辑、保存、恢复某种语言的规则，或添加自定义语言。自动识别文件中的一种或多种语言，规则修改后重新分析生效。完整说明见 [语言规则](docs/language-rules.md)。通用日志头规则在独立折叠区编辑 JSON，也可使用：
 
 ```powershell
 .\dist\log-reviewer-windows-amd64.exe analyze --rules .\samples\rules.json --out report.json custom.log
@@ -67,7 +79,7 @@ Linux / macOS 使用对应平台的文件，先执行 `chmod +x log-reviewer-*`�
 
 - 流式扫描，不把整份日志加载进内存。40 字节/匹配事件的索引写入磁盘；100 万事件约 38.2 MiB 索引。需要足够的可写缓存空间。
 - 无固定的输入文件大小上限；已实测 10GiB 文件。性能记录见 [docs/VALIDATION.md](docs/VALIDATION.md)，结果受磁盘、格式、堆栈长度、唯一分类数量影响，不保证任何输入都能 10 秒完成。
-- GUI 详情每次 10 条，单条预览前 2 MiB；terminal `query --details` 每页最多 100 条。完整事件可通过导出获取，包括超长行与堆栈。
+- GUI 每页 10 条折叠摘要，每条最多读取前 4 KiB 提取请求 ID；展开后正文及各方向上下文分别有 2 MiB 显示上限。terminal `query --details` 每页最多 100 条。完整事件可通过导出获取。
 - 每条事件使用前 64 KiB 构造指纹，并额外保留可识别的深层 Java cause。超长事件可能归入较粗的分类。分类上限 100,000，超出明确报错，不悄悄丢弃。
 - UTF-8 / UTF-8 BOM、LF / CRLF；ANSI 颜色在识别时移除，导出保留原文。UTF-16、gzip 需要先转换/解压，初版会明确拒绝。
 - 关键字匹配完整事件，忽略大小写；正则逐物理行匹配，单行最多 1 MiB，超出明确报错。使用 Go RE2 语法，不支持反向引用和 lookbehind。
@@ -93,6 +105,8 @@ Linux / macOS 可运行 `sh scripts/build.sh`。产物覆盖 Windows / Linux / m
 实测生成工具：`go run ./tools/bench --dir <有足够空间的临时目录> --gib 1`，或加 `--dense` 生成全 ERROR 日志。生成的文件是真实写入的日志，不是稀疏文件。
 
 GUI 自动验证：配置 `NODE_PATH` 指向已有 Playwright 包，运行 `node tests/gui-smoke.cjs`；连接 `127.0.0.1:9222` Chrome，创建独立浏览器 context。
+
+新版工作区验证运行 `node tests/ui-workspace.cjs`，覆盖拖放、六种布局、总体/单条上下文、全屏与时间片段导出。其他回归入口见 [项目状态](docs/PROJECT_STATUS.md)。
 
 SFTP 端到端验证使用自带的本地测试服务器，不连接真实业务服务器：
 
