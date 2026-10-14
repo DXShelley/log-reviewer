@@ -28,6 +28,7 @@ import (
 var assets embed.FS
 
 type Server struct {
+	rules            *logs.RuleStore
 	mu               sync.RWMutex
 	jobs             sync.WaitGroup
 	Report           *logs.Report
@@ -43,7 +44,7 @@ func New(dir string) *Server {
 	if _, err := rand.Read(b); err != nil {
 		panic(err)
 	}
-	return &Server{dir: dir, token: hex.EncodeToString(b), uploads: map[string]string{}}
+	return &Server{dir: dir, token: hex.EncodeToString(b), uploads: map[string]string{}, rules: &logs.RuleStore{Dir: filepath.Join(dir, "rules")}}
 }
 func (s *Server) Token() string { return s.token }
 func (s *Server) Handler(addr string) http.Handler {
@@ -60,6 +61,7 @@ func (s *Server) Handler(addr string) http.Handler {
 	m.HandleFunc("/api/report", s.report)
 	m.HandleFunc("/api/browse", s.browse)
 	m.HandleFunc("/api/upload", s.upload)
+	m.HandleFunc("/api/language-rules", s.languageRules)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -133,6 +135,12 @@ func (s *Server) Start(paths []string, all bool, rules []logs.Rule, languages ..
 		s.mu.Unlock()
 		return errors.New("analysis already running")
 	}
+	stored, err := s.rules.Overrides()
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	languages = append(stored, languages...)
 	s.busy = true
 	s.jobs.Add(1)
 	s.err = ""

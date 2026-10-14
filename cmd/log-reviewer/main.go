@@ -17,7 +17,7 @@ import (
 	"log-reviewer/internal/server"
 )
 
-const version = "0.2.2"
+const version = "0.3.0"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -55,7 +55,7 @@ func run(args []string) error {
 	}
 }
 
-const help = `Log Reviewer 0.2.2 - local, streaming log classification
+const help = `Log Reviewer 0.3.0 - local, streaming log classification
 
   log-reviewer                              Open local GUI
   log-reviewer gui [--port 8765] [--no-browser] [files...]
@@ -99,14 +99,24 @@ func analyze(args []string) error {
 		return err
 	}
 	var languages []logs.LanguageRule
+	ruleDirectory, err := logs.DefaultRuleDirectory()
+	if err != nil {
+		return err
+	}
+	languages, err = (&logs.RuleStore{Dir: ruleDirectory}).Overrides()
+	if err != nil {
+		return err
+	}
 	if *languagePath != "" {
 		b, err := os.ReadFile(*languagePath)
 		if err != nil {
 			return err
 		}
-		if err := json.Unmarshal(b, &languages); err != nil {
+		var overrides []logs.LanguageRule
+		if err := json.Unmarshal(b, &overrides); err != nil {
 			return err
 		}
+		languages = append(languages, overrides...)
 	}
 	abs, err := filepath.Abs(*out)
 	if err != nil {
@@ -199,10 +209,15 @@ func query(command string, args []string) error {
 	return json.NewEncoder(os.Stdout).Encode(map[string]any{"groups": g, "sources": r.Sources})
 }
 func gui(args []string) error {
+	defaultRules, err := logs.DefaultRuleDirectory()
+	if err != nil {
+		return err
+	}
 	f := flag.NewFlagSet("gui", flag.ContinueOnError)
 	port := f.Int("port", 8765, "loopback port; 0 chooses a free port")
 	noBrowser := f.Bool("no-browser", false, "do not open browser")
 	keep := f.Bool("keep-cache", false, "keep session index after exit")
+	ruleDir := f.String("rule-dir", defaultRules, "persistent per-language rule directory")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
@@ -214,6 +229,9 @@ func gui(args []string) error {
 		defer os.RemoveAll(dir)
 	}
 	s := server.New(dir)
+	if err := s.UseRuleDirectory(*ruleDir); err != nil {
+		return err
+	}
 	defer s.Close()
 	l, srv, err := server.Serve(s, *port)
 	if err != nil && *port == 8765 {

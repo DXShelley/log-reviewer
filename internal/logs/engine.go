@@ -209,7 +209,7 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 		}
 	}()
 	w := bufio.NewWriterSize(f, 1024*1024)
-	report := &Report{Schema: "log-reviewer/v1", Version: "0.2.2", Created: time.Now().Format(time.RFC3339), Formats: map[string]uint64{}, Groups: []*Group{}, Sources: []Source{}, IndexPath: f.Name(), Notes: []string{"Impact is a heuristic based on log severity; business impact is not inferred.", "Scope lists observed files and logger/service names, not affected users.", "Local timestamps without offsets use the scanning machine's local timezone.", "Grouping masks numeric values and IDs; inspect occurrences before assuming identical causes."}}
+report := &Report{Schema: "log-reviewer/v1", Version: "0.3.0", Created: time.Now().Format(time.RFC3339), Formats: map[string]uint64{}, Groups: []*Group{}, Sources: []Source{}, IndexPath: f.Name(), Notes: []string{"Impact is a heuristic based on log severity; business impact is not inferred.", "Scope lists observed files and logger/service names, not affected users.", "Local timestamps without offsets use the scanning machine's local timezone.", "Grouping masks numeric values and IDs; inspect occurrences before assuming identical causes."}}
 	for _, path := range paths {
 		st, err := os.Stat(path)
 		if err != nil {

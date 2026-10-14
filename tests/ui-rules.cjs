@@ -1,0 +1,21 @@
+const {chromium}=require('playwright');
+const {spawn}=require('child_process');
+const fs=require('fs'),os=require('os'),path=require('path'),assert=require('assert');
+async function main(){
+ const root=path.resolve(__dirname,'..'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'log-reviewer-ui-rules-'));
+ let child,browser,context;
+ async function start(){child=spawn(path.join(root,'dist/log-reviewer-windows-amd64.exe'),['gui','--no-browser','--port','0','--rule-dir',dir],{windowsHide:true});return await new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('startup timeout')),10000);child.on('error',reject);child.stdout.on('data',b=>{output+=b;const m=output.match(/GUI: (http:\/\/\S+)/);if(m){clearTimeout(timer);resolve(m[1])}})})}
+ try{
+  let url=await start();browser=await chromium.connectOverCDP('http://127.0.0.1:9222',{timeout:5000});context=await browser.newContext({viewport:{width:1440,height:980}});const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(url);
+  await page.locator('#rules-toggle').click();await page.waitForFunction(()=>document.querySelectorAll('#language-list button').length===17);
+  const python=await page.evaluate(()=>json('language-rules').then(x=>x.languages.find(e=>e.rule.id==='python').rule));
+  await page.locator('#rule-evidence').fill('MY_JAVA_FAILURE');await page.locator('#rule-start').fill('^MY_JAVA_FAILURE:');await page.locator('#save-language').click();await page.waitForFunction(()=>document.getElementById('rule-status').textContent==='已保存修改');assert(fs.existsSync(path.join(dir,'java.json')));
+  await page.locator('[data-language="python"]').click();assert(await page.locator('#rule-evidence').inputValue()===python.evidence);
+  await page.locator('[data-language="java"]').click();await page.locator('#rule-evidence').fill('[');await page.locator('#save-language').click();await page.locator('#rule-error').waitFor({state:'visible'});assert(JSON.parse(fs.readFileSync(path.join(dir,'java.json'))).evidence==='MY_JAVA_FAILURE');await page.locator('#rule-evidence').fill('MY_JAVA_FAILURE');
+  fs.mkdirSync(path.join(root,'reports'),{recursive:true});await page.screenshot({path:path.join(root,'reports/rules-desktop.png')});await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(root,'reports/rules-mobile.png')});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.locator('#close-rules').click();await page.locator('#upload').setInputFiles({name:'custom.log',mimeType:'text/plain',buffer:Buffer.from('MY_JAVA_FAILURE: failed\n')});await page.waitForFunction(()=>!document.getElementById('analyze').disabled);await page.locator('#analyze').click();await page.waitForFunction(()=>document.querySelectorAll('.group-row').length===1);assert(await page.evaluate(()=>groups[0].languages.includes('java')));
+  child.kill();await new Promise(resolve=>child.once('exit',resolve));url=await start();await page.goto(url);await page.locator('#rules-toggle').click();await page.waitForFunction(()=>document.getElementById('rule-status').textContent==='已保存修改');assert(await page.locator('#rule-evidence').inputValue()==='MY_JAVA_FAILURE');await page.locator('#restore-language').click();await page.waitForFunction(()=>document.getElementById('rule-status').textContent==='内置规则');assert(!fs.existsSync(path.join(dir,'java.json')));
+  await page.locator('#add-language').click();await page.locator('#rule-id').fill('custom');await page.locator('#rule-label').fill('Custom');await page.locator('#rule-evidence').fill('CustomError');await page.locator('#save-language').click();await page.waitForFunction(()=>document.getElementById('rule-status').textContent==='自定义规则');await page.locator('#restore-language').click();await page.waitForFunction(()=>document.querySelectorAll('#language-list button').length===17);assert(!fs.existsSync(path.join(dir,'custom.json')));assert(errors.length===0,errors.join('\n'));console.log('Rules UI passed: separate languages, isolated save, invalid regex, actual analysis, restart persistence, restore, custom add/delete, desktop/mobile');
+ }finally{if(context)await context.close();if(browser)await browser.close();if(child)child.kill()}
+}
+main().catch(e=>{console.error(e);process.exitCode=1});

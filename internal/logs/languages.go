@@ -13,6 +13,7 @@ import (
 var languageFiles embed.FS
 
 type LanguageRule struct {
+	Label           string `json:"label,omitempty"`
 	ID              string `json:"id"`
 	Evidence        string `json:"evidence"`
 	Start           string `json:"start,omitempty"`
