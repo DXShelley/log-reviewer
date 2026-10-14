@@ -26,7 +26,7 @@ log-reviewer export --report report.json --group a888c34a40347801 --out evidence
 
 `samples.source` 是 `sources` 的零基索引；offset/length 的单位是字节，line 是从 1 开始的物理行号。无需理解索引格式也能按样本位置直接读取源文件。时间为 RFC3339；未识别到时间时字符串缺省/空，数字时间 0 代表未知。
 
-`query --details` 返回 `{details: [...], more: bool}`；详情包含完整位置、事件预览、before/after 上下文和 truncated 标志。单事件预览最多 2 MiB，导出不截断。支持 `--offset` 和 `--limit` 分页。
+`query --details` 返回 `{details: [...], more: bool}`；详情包含完整位置、事件预览、before/after 上下文和 truncated 标志。单事件预览最多 2 MiB，导出不截断。支持 `--offset` 和 `--limit` 分页。上下文参数为 `--before 20 --after 100`（默认值），分别支持 0–10000 行。关键字或正则搜索以事件中首次匹配所在行为中心，返回 `context_line` 和 `context_text`；同时提供关键字和正则时优先以关键字为中心。无文本条件时仍按完整事件的前后边界读取。上下文每个方向最多显示 2 MiB，达到限制时返回 `context_truncated: true`。
 
 ## 本机 HTTP API
 
@@ -42,7 +42,7 @@ log-reviewer serve --no-browser --port 8765 --keep-cache
 | `GET /api/status` | busy、bytes、total、events、lines、error、ready；完成时附 report |
 | `POST /api/cancel` | 取消正在进行的分析 |
 | `GET /api/groups` | group、level、keyword、regex、from、to、source，返回筛选后的分类与次数 |
-| `GET /api/details` | 同上，另有 offset（默认 0）、limit（默认 20，上限 100） |
+| `GET /api/details` | 同上，另有 offset（默认 0）、limit（默认 20，上限 100）、before（默认 20）、after（默认 100），上下文行数范围 0–10000 |
 | `GET /api/export` | 同上，返回符合条件的完整原始事件文本 |
 | `GET /api/report` | 完整 JSON 报告 |
 | `GET /api/browse?path=...` | 本机文件选择；path=roots 列磁盘 / 根目录 |

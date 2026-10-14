@@ -286,7 +286,17 @@ func (s *Server) details(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	d, more, err := logs.Details(report, f, offset, limit)
+	context := logs.ContextOptions{Before: 20, After: 100}
+	for key, target := range map[string]*int{"before": &context.Before, "after": &context.After} {
+		if value := r.URL.Query().Get(key); value != "" {
+			*target, err = strconv.Atoi(value)
+			if err != nil {
+				fail(w, 400, err)
+				return
+			}
+		}
+	}
+	d, more, err := logs.Details(report, f, offset, limit, context)
 	if err != nil {
 		fail(w, 400, err)
 		return

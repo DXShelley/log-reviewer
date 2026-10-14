@@ -74,4 +74,12 @@ func TestAPIWorkflow(t *testing.T) {
 	if w := call("GET", "/api/details?limit=101", ""); w.Code != 400 {
 		t.Fatal("bad pagination", w.Code)
 	}
+	for _, path := range []string{"/api/details?before=-1", "/api/details?after=10001", "/api/details?before=abc"} {
+		if w := call("GET", path, ""); w.Code != 400 {
+			t.Fatalf("%s: %d", path, w.Code)
+		}
+	}
+	if w := call("GET", "/api/details?before=0&after=0", ""); w.Code != 200 || !strings.Contains(w.Body.String(), `"before":""`) || !strings.Contains(w.Body.String(), `"after":""`) {
+		t.Fatal(w.Code, w.Body.String())
+	}
 }

@@ -17,7 +17,7 @@ import (
 	"log-reviewer/internal/server"
 )
 
-const version = "0.2.0"
+const version = "0.2.1"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -55,7 +55,7 @@ func run(args []string) error {
 	}
 }
 
-const help = `Log Reviewer 0.2.0 - local, streaming log classification
+const help = `Log Reviewer 0.2.1 - local, streaming log classification
 
   log-reviewer                              Open local GUI
   log-reviewer gui [--port 8765] [--no-browser] [files...]
@@ -67,6 +67,7 @@ const help = `Log Reviewer 0.2.0 - local, streaming log classification
 
 Filters: --group ID --level ERROR|WARN|FATAL --keyword TEXT --regex PATTERN
          --from RFC3339 --to RFC3339 --source N (zero-based file index)
+Context: --before 20 --after 100 (0-10000 lines, with query --details)
 All flags must precede positional file paths. Directory inputs include *.log, *.log.* and *.txt.
 Query emits JSON; export streams full occurrences. Regex matches physical lines.
 No network connection, account, or external runtime is required.
@@ -126,6 +127,8 @@ func query(command string, args []string) error {
 	path := f.String("report", "report.json", "analysis report")
 	out := f.String("out", "", "export output path")
 	detail := f.Bool("details", false, "include occurrence details")
+	before := f.Int("before", 20, "context lines before keyword or event")
+	after := f.Int("after", 100, "context lines after keyword or event")
 	offset := f.Int("offset", 0, "skip matching occurrences")
 	limit := f.Int("limit", 20, "page size (max 100)")
 	q := logs.Filter{Source: -1}
@@ -183,7 +186,7 @@ func query(command string, args []string) error {
 		return os.Rename(tmp.Name(), abs)
 	}
 	if *detail {
-		d, more, err := logs.Details(r, q, *offset, *limit)
+		d, more, err := logs.Details(r, q, *offset, *limit, logs.ContextOptions{Before: *before, After: *after})
 		if err != nil {
 			return err
 		}

@@ -295,19 +295,34 @@ func Summarize(r *Report, f Filter) ([]*Group, error) {
 }
 
 type Detail struct {
-	GroupID   string `json:"group_id"`
-	Source    string `json:"source"`
-	Offset    uint64 `json:"offset"`
-	Length    uint64 `json:"length"`
-	Line      uint64 `json:"line"`
-	Time      string `json:"time"`
-	Text      string `json:"text"`
-	Before    string `json:"before"`
-	After     string `json:"after"`
-	Truncated bool   `json:"truncated"`
+	ContextLine      uint64 `json:"context_line,omitempty"`
+	ContextText      string `json:"context_text,omitempty"`
+	ContextTruncated bool   `json:"context_truncated,omitempty"`
+	GroupID          string `json:"group_id"`
+	Source           string `json:"source"`
+	Offset           uint64 `json:"offset"`
+	Length           uint64 `json:"length"`
+	Line             uint64 `json:"line"`
+	Time             string `json:"time"`
+	Text             string `json:"text"`
+	Before           string `json:"before"`
+	After            string `json:"after"`
+	Truncated        bool   `json:"truncated"`
 }
 
-func ReadDetail(r *Report, rec Record, g *Group) (Detail, error) {
+type ContextOptions struct {
+	Before, After  int
+	Keyword, Regex string
+}
+
+func ReadDetail(r *Report, rec Record, g *Group, options ...ContextOptions) (Detail, error) {
+	context := ContextOptions{Before: 20, After: 100}
+	if len(options) > 0 {
+		context = options[0]
+	}
+	if context.Before < 0 || context.After < 0 || context.Before > 10000 || context.After > 10000 {
+		return Detail{}, errors.New("context lines must be between 0 and 10000")
+	}
 	d := Detail{GroupID: g.ID, Source: r.Sources[rec.Source].Path, Offset: rec.Offset, Length: rec.Length, Line: rec.Line, Time: stamp(rec.Time)}
 	f, err := validatedFile(r, rec.Source)
 	if err != nil {
@@ -325,33 +340,50 @@ func ReadDetail(r *Report, rec Record, g *Group) (Detail, error) {
 		return d, err
 	}
 	d.Text = string(b)
-	start := int64(rec.Offset) - 4096
-	if start < 0 {
-		start = 0
+	anchorStart, anchorEnd := int64(rec.Offset), int64(rec.Offset+rec.Length)
+	if context.Keyword != "" || context.Regex != "" {
+		var re *regexp.Regexp
+		if context.Regex != "" {
+			re, err = regexp.Compile(context.Regex)
+			if err != nil {
+				return d, err
+			}
+		}
+		var found bool
+		anchorStart, anchorEnd, d.ContextLine, d.ContextText, d.ContextTruncated, found, err = findContextAnchor(f, rec, context.Keyword, re)
+		if err != nil {
+			return d, err
+		}
+		if !found {
+			anchorStart = int64(rec.Offset)
+			anchorEnd = int64(rec.Offset + rec.Length)
+		}
 	}
-	before := make([]byte, int64(rec.Offset)-start)
-	f.ReadAt(before, start)
-	lines := strings.Split(strings.TrimRight(string(before), "\r\n"), "\n")
-	if start > 0 && len(lines) > 0 {
-		lines = lines[1:]
+	var truncated bool
+	d.Before, truncated, err = readContext(f, anchorStart, context.Before, true)
+	d.ContextTruncated = d.ContextTruncated || truncated
+	if err != nil {
+		return d, err
 	}
-	if len(lines) > 5 {
-		lines = lines[len(lines)-5:]
+	d.After, truncated, err = readContext(f, anchorEnd, context.After, false)
+	d.ContextTruncated = d.ContextTruncated || truncated
+	if err != nil {
+		return d, err
 	}
-	d.Before = strings.Join(lines, "\n")
-	after := make([]byte, 4096)
-	count, _ := f.ReadAt(after, int64(rec.Offset+rec.Length))
-	lines = strings.Split(string(after[:count]), "\n")
-	if len(lines) > 5 {
-		lines = lines[:5]
-	}
-	d.After = strings.Join(lines, "\n")
 	return d, nil
 }
 
 var stopWalk = errors.New("stop walk")
 
-func Details(r *Report, f Filter, offset, limit int) ([]Detail, bool, error) {
+func Details(r *Report, f Filter, offset, limit int, options ...ContextOptions) ([]Detail, bool, error) {
+	if len(options) == 0 {
+		options = []ContextOptions{{Before: 20, After: 100}}
+	}
+	options[0].Keyword = f.Keyword
+	options[0].Regex = f.Regex
+	if len(options) > 0 && (options[0].Before < 0 || options[0].After < 0 || options[0].Before > 10000 || options[0].After > 10000) {
+		return nil, false, errors.New("context lines must be between 0 and 10000")
+	}
 	if offset < 0 || limit < 1 || limit > 100 {
 		return nil, false, errors.New("invalid pagination")
 	}
@@ -367,7 +399,7 @@ func Details(r *Report, f Filter, offset, limit int) ([]Detail, bool, error) {
 			more = true
 			return stopWalk
 		}
-		d, err := ReadDetail(r, rec, g)
+		d, err := ReadDetail(r, rec, g, options...)
 		if err != nil {
 			return err
 		}
