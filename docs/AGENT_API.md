@@ -30,13 +30,13 @@ log-reviewer export --report report.json --group a888c34a40347801 --out evidence
 
 `query --details` 返回 `{details: [...], more: bool}`；详情包含完整位置、事件预览、before/after 上下文和 truncated 标志。单事件预览最多 2 MiB，导出不截断。支持 `--offset` 和 `--limit` 分页。上下文参数为 `--before 20 --after 100`（默认值），分别支持 0–10000 行。关键字或正则搜索以事件中首次匹配所在行为中心，返回 `context_line` 和 `context_text`；同时提供关键字和正则时优先以关键字为中心。无文本条件时仍按完整事件的前后边界读取。上下文每个方向最多显示 2 MiB，达到限制时返回 `context_truncated: true`。
 
-## 本机 HTTP API
+## HTTP API
 
 ```sh
 log-reviewer serve --no-browser --port 8765 --keep-cache
 ```
 
-启动输出 URL、API token 和缓存目录。请求只走本机直连，附带 `Authorization: Bearer <token>`。服务仅监听 127.0.0.1；跨站 Origin、非 127.0.0.1 Host 和未认证 API 会被拒绝。
+启动输出最终访问 URL、API token 和缓存目录。请求附带 `Authorization: Bearer <token>`。默认监听全部 IPv4 并尝试 IPv6，端口不可用时自动分配。仅本机监听用 `--host 127.0.0.1`，域名访问用 `--allowed-hosts logs.example.com`。跨站 Origin、未在白名单的域名 Host 和未认证 API 会被拒绝；IP 地址和同源请求可远程访问。详见 [服务器说明](server-usage.md)。
 
 | 方法与路由 | 参数 / 内容 |
 | --- | --- |
