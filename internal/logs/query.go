@@ -46,6 +46,32 @@ func ParseBound(s string) (int64, error) {
 	}
 	return 0, fmt.Errorf("invalid time: %s", s)
 }
+
+// A date/minute/second upper bound includes its entire displayed precision.
+func ParseUpperBound(s string) (int64, error) {
+	n, err := ParseBound(s)
+	if err != nil || s == "" {
+		return n, err
+	}
+	precision := s
+	if i := strings.IndexAny(precision, "T "); i >= 0 {
+		precision = precision[i+1:]
+		if j := strings.IndexAny(precision, "Z+-"); j >= 0 {
+			precision = precision[:j]
+		}
+	} else if len(precision) == 10 {
+		return time.Unix(0, n).In(time.Local).AddDate(0, 0, 1).UnixNano() - 1, nil
+	}
+	if !strings.ContainsAny(precision, ".,") {
+		switch strings.Count(precision, ":") {
+		case 1:
+			n += int64(time.Minute) - 1
+		case 2:
+			n += int64(time.Second) - 1
+		}
+	}
+	return n, nil
+}
 func newQuery(report *Report, f Filter) (*query, error) {
 	q := &query{Filter: f, groups: map[uint32]*Group{}, files: map[uint32]*os.File{}, scratch: make([]byte, 64*1024)}
 	var err error
@@ -53,7 +79,7 @@ func newQuery(report *Report, f Filter) (*query, error) {
 	if err != nil {
 		return nil, err
 	}
-	q.to, err = ParseBound(f.To)
+	q.to, err = ParseUpperBound(f.To)
 	if err != nil {
 		return nil, err
 	}

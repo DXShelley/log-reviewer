@@ -1,0 +1,10 @@
+.filter-control{display:flex;gap:4px;min-width:0}.filter-control input,.filter-control select{flex:1;min-width:0}.filter-control button{flex:none;width:30px;padding:0;color:#697480;font-size:18px}
+.date-trigger{cursor:pointer;font-size:12px}
+.group-meta{flex-wrap:wrap}.group-meta .badge{flex-shrink:0;white-space:nowrap}
+#time-picker{width:min(360px,95vw)}.time-picker-body,.paste-body{padding:16px}
+.calendar-nav{display:flex;align-items:center;gap:8px}.calendar-nav button{width:32px;padding:0}.calendar-nav input{width:84px}.calendar-nav select{flex:1;min-width:0}
+.calendar-week,.calendar-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}.calendar-week{padding:14px 0 8px;text-align:center;color:#7a8591;font-size:12px}
+.calendar-days{grid-template-rows:repeat(6,34px)}.calendar-days button{padding:0;min-height:0;border-color:transparent}.calendar-days button.selected{background:#167663;color:white}.calendar-days button.today{border-color:#167663}
+.time-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px}.time-fields label{display:flex;gap:6px;align-items:center}.time-fields input{width:100%;min-width:0}.time-picker-body p{font-size:12px;margin-bottom:0}
+.dialog-error{color:#a32b3d;overflow-wrap:anywhere}.paste-body label{display:block;margin:8px 0}.paste-body input{width:100%}.paste-body textarea{font:12px/1.65 Consolas,Menlo,monospace}
+@media(max-width:600px){.filters>div{min-width:0;flex-basis:100%}.filters .search-input{min-width:0}.calendar-nav{gap:5px}}
