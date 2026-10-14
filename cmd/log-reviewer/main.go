@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -274,7 +275,7 @@ func gui(args []string) error {
 			browserHost = "::1"
 		}
 	}
-	url := "http://" + net.JoinHostPort(browserHost, listenPort) + "/#" + s.Token()
+	url := accessURL(browserHost, listenPort, s.Token())
 	fmt.Printf("Log Reviewer %s\nGUI: %s\nAPI token: %s\nCache: %s\nPress Ctrl+C to exit.\n", version, url, s.Token(), dir)
 	fmt.Printf("Listen: %s\n", l.Addr())
 	printAccessAddresses(listenHost, listenPort, s.Token(), ipv6 != nil)
@@ -342,7 +343,7 @@ func printAccessAddresses(host, port, token string, extraIPv6 bool) {
 			} else if ip.To4() == nil && (extraIPv6 || bound.To4() == nil) {
 				host := ip.String()
 				if ip.IsLinkLocalUnicast() {
-					host += "%" + iface.Name
+					host += "%" + strconv.Itoa(iface.Index)
 				}
 				fmt.Printf("External IPv6 (%s): %s\n", iface.Name, accessURL(host, port, token))
 			}
