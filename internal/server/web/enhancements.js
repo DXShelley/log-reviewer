@@ -25,16 +25,22 @@
  $('search').before(filterBand);filterBand.append(filterHeading,$('search'));
  const controls=node('div',undefined,'view-controls'),context=document.querySelector('.context-controls');workspace.before(controls);controls.append(context);
  const autoLabel=node('label',undefined,'auto-switch'),auto=node('input');auto.type='checkbox';auto.id='context-auto';auto.checked=restore('context-auto','true')==='true';autoLabel.append(auto,node('span','自动上下文'));
- const apply=node('button','应用全部上下文'),reset=node('button','恢复 20 / 100');apply.id='apply-context';reset.id='reset-context';context.prepend(autoLabel);context.append(apply,reset);
- apply.title='应用到所有分类，清除单条自定义范围';reset.title='恢复自动模式和默认扫描上限';
+ const reset=node('button','恢复 20 / 100');reset.id='reset-context';context.prepend(autoLabel);context.append(reset);
+ reset.title='恢复自动模式和默认扫描上限';
  for(const [id,fallback] of [['context-before','20'],['context-after','100']]){$(id).value=restore(id,fallback);$(id).onchange=null}
  function defaults(){
   const before=Number($('context-before').value),after=Number($('context-after').value);
   if(![$('context-before').value,$('context-after').value].every(Boolean)||![before,after].every(n=>Number.isInteger(n)&&n>=0&&n<=10000))throw Error('上下文行数应为 0–10000 的整数');
   return {before,after,auto:auto.checked};
  }
- apply.onclick=()=>{try{defaults();for(const id of ['context-before','context-after','context-auto'])store(id,id==='context-auto'?String(auto.checked):$(id).value);overrides.clear();loadDetails();toast('已应用到全部分类与事件')}catch(e){error(e)}};
- auto.onchange=()=>apply.click();reset.onclick=()=>{$('context-before').value=20;$('context-after').value=100;auto.checked=true;apply.click()};
+ const applyDefaults=()=>{try{defaults();for(const id of ['context-before','context-after','context-auto'])store(id,id==='context-auto'?String(auto.checked):$(id).value);overrides.clear();loadDetails()}catch(e){error(e)}};
+ for(const id of ['context-before','context-after'])$(id).onchange=applyDefaults;
+ auto.onchange=applyDefaults;reset.onclick=()=>{$('context-before').value=20;$('context-after').value=100;auto.checked=true;applyDefaults()};
+ const mask=node('dialog');mask.id='operation-mask';mask.setAttribute('aria-label','正在处理');const maskText=node('p'),maskCancel=node('button','取消分析');maskCancel.onclick=()=>$('cancel').click();mask.append(node('div',undefined,'operation-spinner'),maskText,maskCancel);document.body.append(mask);mask.addEventListener('cancel',event=>event.preventDefault());
+ let exporting=0;function updateMask(){const active=busy||exporting>0;maskText.textContent=busy?'正在分析日志…':'正在导出日志…';maskCancel.hidden=!busy;if(active&&!mask.open)mask.showModal();if(!active&&mask.open)mask.close()}
+ const originalSetBusy=setBusy;setBusy=function(value){originalSetBusy(value);updateMask()};
+ const originalAnalyze=$('analyze').onclick;$('analyze').onclick=async function(event){setBusy(true);try{await originalAnalyze.call(this,event)}finally{poll()}};
+ const originalDownload=download;download=async function(...args){exporting++;updateMask();try{return await originalDownload(...args)}finally{exporting--;updateMask()}};
  const viewer=node('section',undefined,'event-viewer');viewer.id='event-viewer';workspace.append(viewer);
  const dialog=node('dialog');dialog.id='event-dialog';const dialogHeader=node('div',undefined,'dialog-header'),dialogBody=node('div',undefined,'event-dialog-body');
  dialogHeader.append(node('h2','日志内容'),logIcon('X','关闭日志内容',()=>dialog.close()));dialog.append(dialogHeader,dialogBody);document.body.append(dialog);
@@ -51,7 +57,7 @@
  document.addEventListener('drop',()=>{depth=0;drop.hidden=true});window.addEventListener('blur',()=>{depth=0;drop.hidden=true});$('upload-button').title='选择文件或将多个文件拖入窗口';
  const exportMode=node('select');exportMode.id='time-export-mode';exportMode.setAttribute('aria-label','时间片段导出方式');for(const [value,label] of [['merged','合并日志'],['files','分文件 ZIP']])exportMode.add(new Option(label,value));
  const exportButton=node('button','导出时间片段');exportButton.type='button';exportButton.id='time-export';decorate(exportButton,'Download','导出时间片段');
- const exportActions=node('div',undefined,'time-export-actions');exportActions.append(exportMode,exportButton);$('search').append(exportActions);
+ const exportActions=node('div',undefined,'time-export-actions');exportActions.append(node('strong','日志导出'),exportMode,exportButton);filterHeading.querySelector('h2').textContent='日志筛选';filterBand.append(exportActions);
  exportButton.onclick=async()=>{try{if(!report)throw Error('请先分析日志');if(!$('from').value||!$('to').value)throw Error('请选择开始和结束时间');const q=params();for(const key of ['group','level','keyword','regex'])q.delete(key);q.set('mode',exportMode.value);exportButton.disabled=true;await download('time-export?'+q,exportMode.value==='files'?'log-reviewer-time.zip':'log-reviewer-time.txt')}catch(e){error(e)}finally{exportButton.disabled=false}};
  const sshLabel=node('label','工具所在机器的 .ssh 目录');sshLabel.className='remote-wide';const ssh=node('input');ssh.id='remote-ssh-dir';ssh.placeholder='留空使用当前账户的 .ssh';sshLabel.append(ssh);$('remote-fingerprint').required=false;$('remote-fingerprint').placeholder='可留空，使用 .ssh/known_hosts';$('remote-fingerprint').parentElement.after(sshLabel);
  async function showFullscreen(target){if(document.fullscreenElement){await document.exitFullscreen();return}if(target.requestFullscreen){try{await target.requestFullscreen();return}catch{}}fullscreenTarget=target;fullscreenBody.replaceChildren(...target.childNodes);fullscreen.showModal()}
@@ -61,17 +67,17 @@
   const status=node('span',detail.context_mode==='auto'?'自动上下文':'自定义上下文','context-mode '+(detail.context_mode||'manual'));status.title=detail.context_reason||'按指定前后行数读取';heading.append(name,status);target.append(heading);
   const toolbar=node('div',undefined,'event-tools'),before=node('input'),after=node('input');
   for(const [input,value] of [[before,range.auto?detail.context_before:range.before],[after,range.auto?detail.context_after:range.after]]){input.type='number';input.min=0;input.max=10000;input.value=value}
-  before.setAttribute('aria-label','单条前文行数');after.setAttribute('aria-label','单条后文行数');const update=node('button','查询'),inherit=node('button','使用总体');update.title='按当前行数自定义这条事件';inherit.title='恢复总体自动或手动上下文';
+  before.setAttribute('aria-label','单条前文行数');after.setAttribute('aria-label','单条后文行数');const update=node('button','查询');update.title='按当前行数自定义这条事件';
   const beforeLabel=node('label','前文 '),afterLabel=node('label','后文 ');beforeLabel.append(before);afterLabel.append(after);
   const text=[detail.before,(detail.context_text||detail.text).replace(/\r?\n$/,''),detail.after].filter(Boolean).join('\n');
   const copyButton=logIcon('Copy','复制日志内容',()=>copy(text)),full=logIcon('Maximize','全屏浏览日志内容',()=>showFullscreen(target)),wrap=logIcon('WrapText','自动换行');
   wrap.setAttribute('aria-pressed','false');wrap.onclick=()=>{const value=wrap.getAttribute('aria-pressed')!=='true';wrap.setAttribute('aria-pressed',String(value));target.querySelectorAll('.log-text').forEach(pre=>pre.classList.toggle('wrap',value))};
-  toolbar.append(beforeLabel,afterLabel,update,inherit,node('span','前 '+detail.context_before+' 行 / 后 '+detail.context_after+' 行','context-count'),copyButton,wrap,full);target.append(toolbar);
+  toolbar.append(beforeLabel,afterLabel,update,node('span','前 '+detail.context_before+' 行 / 后 '+detail.context_after+' 行','context-count'),copyButton,wrap,full);target.append(toolbar);
   target.append(logPre(text,Math.max(1,(detail.context_line||detail.line)-detail.context_before)));
   if(detail.context_text)target.append(node('div','完整事件','log-section-title'),logPre(detail.text,detail.line));
   const match=detail.text.match(/(?:trace[_-]?id|request[_-]?id|correlation[_-]?id)["'\s:=]+([\w-]+)/i);target.append(node('p',match?'请求标识：'+match[0]:'事件定位：'+basename(detail.source)+' @ '+detail.offset,'event-id'));
   if(detail.remote?.changed)target.append(node('p','远程文件在获取期间发生变化','truncated'));if(detail.truncated||detail.context_truncated)target.append(node('p','内容超过显示上限，已截断；完整内容可导出','truncated'));
-  update.onclick=()=>{const b=Number(before.value),a=Number(after.value);if(!before.value||!after.value||![b,a].every(n=>Number.isInteger(n)&&n>=0&&n<=10000)){error(Error('上下文行数应为 0–10000 的整数'));return}overrides.set(identity,{before:b,after:a,auto:false});refresh()};inherit.onclick=()=>{overrides.delete(identity);refresh()};
+  update.onclick=()=>{const b=Number(before.value),a=Number(after.value);if(!before.value||!after.value||![b,a].every(n=>Number.isInteger(n)&&n>=0&&n<=10000)){error(Error('上下文行数应为 0–10000 的整数'));return}overrides.set(identity,{before:b,after:a,auto:false});refresh()};
  }
  loadDetails=async function(){
   if(!selected)return;const group=selected,version=++detailVersion;opened=null;dialogBody.replaceChildren();clearViewer();
