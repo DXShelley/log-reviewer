@@ -1,0 +1,117 @@
+{
+  "schema": "log-reviewer/v1",
+  "version": "0.2.0",
+  "created": "2026-10-14T14:09:12+08:00",
+  "elapsed_ms": 27179,
+  "bytes": 10737418240,
+  "lines": 64165282,
+  "events": 7699835,
+  "sources": [
+    {
+      "languages": null,
+      "path": "E:\\linshi\\log-reviewer-bench-20261014\\bench-10gib.log",
+      "size": 10737418240,
+      "modified": 1791951947817402900,
+      "lines": 64165282,
+      "events": 7699835
+    }
+  ],
+  "groups": [
+    {
+      "languages": null,
+      "id": "01859080cd831fa8",
+      "number": 1,
+      "level": "ERROR",
+      "title": "database connection failed service=orders host=db.internal code=\u003c*\u003e",
+      "count": 6416529,
+      "first": "2026-10-14T12:30:00.123+08:00",
+      "last": "2026-10-14T12:30:00.123+08:00",
+      "unknown_time": 0,
+      "sources": [
+        0
+      ],
+      "loggers": [
+        "com.demo.OrderService"
+      ],
+      "impact": "高",
+      "impact_basis": "ERROR: 操作失败，实际业务影响未知",
+      "format": "spring/logback",
+      "samples": [
+        {
+          "source": 0,
+          "offset": 0,
+          "length": 142,
+          "line": 1,
+          "time": "2026-10-14T12:30:00.123+08:00"
+        },
+        {
+          "source": 0,
+          "offset": 1681,
+          "length": 142,
+          "line": 11,
+          "time": "2026-10-14T12:30:00.123+08:00"
+        },
+        {
+          "source": 0,
+          "offset": 3362,
+          "length": 142,
+          "line": 21,
+          "time": "2026-10-14T12:30:00.123+08:00"
+        }
+      ]
+    },
+    {
+      "languages": null,
+      "id": "1de214132a57de0e",
+      "number": 2,
+      "level": "WARN",
+      "title": "request slow service=orders route=/api/orders latency=\u003c*\u003e",
+      "count": 1283306,
+      "first": "2026-10-14T12:30:00.123+08:00",
+      "last": "2026-10-14T12:30:00.123+08:00",
+      "unknown_time": 0,
+      "sources": [
+        0
+      ],
+      "loggers": [
+        "com.demo.OrderService"
+      ],
+      "impact": "中",
+      "impact_basis": "WARN: 潜在异常，需结合业务判断",
+      "format": "spring/logback",
+      "samples": [
+        {
+          "source": 0,
+          "offset": 4188,
+          "length": 133,
+          "line": 26,
+          "time": "2026-10-14T12:30:00.123+08:00"
+        },
+        {
+          "source": 0,
+          "offset": 12555,
+          "length": 133,
+          "line": 76,
+          "time": "2026-10-14T12:30:00.123+08:00"
+        },
+        {
+          "source": 0,
+          "offset": 20922,
+          "length": 133,
+          "line": 126,
+          "time": "2026-10-14T12:30:00.123+08:00"
+        }
+      ]
+    }
+  ],
+  "formats": {
+    "spring/logback": 7699835
+  },
+  "notes": [
+    "Impact is a heuristic based on log severity; business impact is not inferred.",
+    "Scope lists observed files and logger/service names, not affected users.",
+    "Local timestamps without offsets use the scanning machine's local timezone.",
+    "Grouping masks numeric values and IDs; inspect occurrences before assuming identical causes."
+  ],
+  "index_path": "C:\\Users\\25433\\AppData\\Local\\Temp\\log-reviewer-rules-stage-20261014\\reports\\events-3370416333.idx"
+}

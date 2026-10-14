@@ -1,0 +1,74 @@
+{
+  "schema": "log-reviewer/v1",
+  "version": "0.2.0",
+  "created": "2026-10-14T14:08:37+08:00",
+  "elapsed_ms": 8305,
+  "bytes": 1073741824,
+  "lines": 7561563,
+  "events": 7561562,
+  "sources": [
+    {
+      "languages": null,
+      "path": "E:\\linshi\\log-reviewer-bench-20261014\\bench-1gib-dense.log",
+      "size": 1073741824,
+      "modified": 1791952129842229900,
+      "lines": 7561563,
+      "events": 7561562
+    }
+  ],
+  "groups": [
+    {
+      "languages": null,
+      "id": "01859080cd831fa8",
+      "number": 1,
+      "level": "ERROR",
+      "title": "database connection failed service=orders host=db.internal code=\u003c*\u003e",
+      "count": 7561562,
+      "first": "2026-10-14T12:30:00.123+08:00",
+      "last": "2026-10-14T12:30:00.123+08:00",
+      "unknown_time": 0,
+      "sources": [
+        0
+      ],
+      "loggers": [
+        "com.demo.OrderService"
+      ],
+      "impact": "高",
+      "impact_basis": "ERROR: 操作失败，实际业务影响未知",
+      "format": "spring/logback",
+      "samples": [
+        {
+          "source": 0,
+          "offset": 0,
+          "length": 142,
+          "line": 1,
+          "time": "2026-10-14T12:30:00.123+08:00"
+        },
+        {
+          "source": 0,
+          "offset": 142,
+          "length": 142,
+          "line": 2,
+          "time": "2026-10-14T12:30:00.123+08:00"
+        },
+        {
+          "source": 0,
+          "offset": 284,
+          "length": 142,
+          "line": 3,
+          "time": "2026-10-14T12:30:00.123+08:00"
+        }
+      ]
+    }
+  ],
+  "formats": {
+    "spring/logback": 7561562
+  },
+  "notes": [
+    "Impact is a heuristic based on log severity; business impact is not inferred.",
+    "Scope lists observed files and logger/service names, not affected users.",
+    "Local timestamps without offsets use the scanning machine's local timezone.",
+    "Grouping masks numeric values and IDs; inspect occurrences before assuming identical causes."
+  ],
+  "index_path": "C:\\Users\\25433\\AppData\\Local\\Temp\\log-reviewer-rules-stage-20261014\\reports\\events-2279493722.idx"
+}
