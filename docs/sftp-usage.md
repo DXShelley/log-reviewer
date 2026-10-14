@@ -1,5 +1,7 @@
 # SFTP 远程日志获取
 
+v0.6.0 支持 `--ssh-dir` 和 GUI 的“.ssh 目录”设置。未传主机指纹或 `known_hosts` 时自动加载此目录下的 `known_hosts`；目录省略时使用运行账户的 `~/.ssh`。GUI 路径属于工具所在机器。端口默认 22，详细示例见 [工作区说明](workspace-usage.md)。
+
 支持按需获取远程服务器的单个文件或目录，并将完成的副本交给现有日志分析器。内置 `github.com/pkg/sftp` 与 `golang.org/x/crypto/ssh`，无需安装 OpenSSH 客户端或额外动态库。
 
 ## GUI

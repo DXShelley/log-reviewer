@@ -67,6 +67,11 @@ func TestSFTPDownloadAndTrust(t *testing.T) {
 	if _, err = Download(context.Background(), options, t.TempDir(), nil); err != nil {
 		t.Fatal("known hosts", err)
 	}
+	options.KnownHosts = ""
+	options.SSHDir = filepath.Dir(known)
+	if _, err = Download(context.Background(), options, t.TempDir(), nil); err != nil {
+		t.Fatal("ssh directory", err)
+	}
 	options.Fingerprint = "SHA256:wrong"
 	options.KnownHosts = ""
 	if _, err = Download(context.Background(), options, t.TempDir(), nil); err == nil {
@@ -169,7 +174,7 @@ func TestSnapshotChangeCancelAndCleanup(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	options := Options{Host: "localhost", User: "tester", Password: "secret", Path: "logs"}
+	options := Options{Host: "localhost", User: "tester", Password: "secret", Path: "logs", SSHDir: t.TempDir()}
 	if options.Validate() == nil {
 		t.Fatal("unverified host accepted")
 	}

@@ -20,7 +20,7 @@ import (
 	"log-reviewer/internal/server"
 )
 
-const version = "0.5.0"
+const version = "0.6.0"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -42,6 +42,8 @@ func run(args []string) error {
 		return analyze(args[1:])
 	case "fetch":
 		return fetch(args[1:])
+	case "export-time":
+		return exportTime(args[1:])
 	case "languages":
 		r, err := logs.BuiltinLanguages()
 		if err != nil {
@@ -63,7 +65,7 @@ func run(args []string) error {
 	}
 }
 
-const help = `Log Reviewer 0.5.0 - local, streaming log classification
+const help = `Log Reviewer 0.6.0 - local, streaming log classification
 
   log-reviewer                              Open local GUI
   log-reviewer gui [--host 0.0.0.0] [--port 8765] [--no-browser] [files...]
@@ -71,11 +73,13 @@ const help = `Log Reviewer 0.5.0 - local, streaming log classification
   log-reviewer analyze [--out report.json] [--all] [--rules rules.json] files...
   log-reviewer languages                     Export built-in language rules as JSON
   log-reviewer fetch --host SERVER --user USER --path PATH --key PRIVATE_KEY
-    [--fingerprint SHA256:...] [--known-hosts FILE] [--recursive] [--analyze]
+    [--fingerprint SHA256:...] [--known-hosts FILE] [--ssh-dir DIR] [--recursive] [--analyze]
     [--out-dir remote-logs] [--pattern *.log,*.txt] [--max-files 1000] [--max-bytes 10737418240]
   log-reviewer analyze --language-rules languages.json [files...]
   log-reviewer query --report report.json [filters] [--details] [--offset 0] [--limit 20]
   log-reviewer export --report report.json [filters] [--out errors.txt]
+  log-reviewer export-time --report report.json --from TIME --to TIME
+    [--out time-logs.txt] [--out-dir NEW_DIRECTORY] [--source N]
 
 Filters: --group ID --level ERROR|WARN|FATAL --keyword TEXT --regex PATTERN
          --from RFC3339 --to RFC3339 --source N (zero-based file index)

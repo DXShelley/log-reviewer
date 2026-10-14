@@ -25,6 +25,7 @@ func fetch(args []string) error {
 	f.StringVar(&options.Path, "path", "", "remote file or directory")
 	f.StringVar(&options.Fingerprint, "fingerprint", "", "verified SHA256 host fingerprint")
 	f.StringVar(&options.KnownHosts, "known-hosts", "", "OpenSSH known_hosts file")
+	f.StringVar(&options.SSHDir, "ssh-dir", "", "local OpenSSH directory containing known_hosts")
 	f.StringVar(&options.Pattern, "pattern", "*.log,*.log.*,*.txt", "comma-separated filename patterns for directories")
 	f.BoolVar(&options.Recursive, "recursive", false, "include nested directories; symbolic links skipped")
 	f.IntVar(&options.MaxFiles, "max-files", 1000, "maximum matching files (1-10000)")
@@ -51,7 +52,7 @@ func fetch(args []string) error {
 		}
 		options.PrivateKey = string(bytes)
 	}
-	if options.Fingerprint == "" && options.KnownHosts == "" {
+	if options.Fingerprint == "" && options.KnownHosts == "" && options.SSHDir == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			options.KnownHosts = filepath.Join(home, ".ssh", "known_hosts")
 		}

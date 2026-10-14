@@ -68,6 +68,7 @@ func (s *Server) Handler(addr string) http.Handler {
 	m.HandleFunc("/api/upload", s.upload)
 	m.HandleFunc("/api/language-rules", s.languageRules)
 	m.HandleFunc("/api/remote-fetch", s.remoteFetch)
+	m.HandleFunc("/api/time-export", s.timeExport)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
@@ -358,6 +359,7 @@ func (s *Server) details(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	context := logs.ContextOptions{Before: 20, After: 100}
+	context.Summary = r.URL.Query().Get("summary") == "1"
 	for key, target := range map[string]*int{"before": &context.Before, "after": &context.After} {
 		if value := r.URL.Query().Get(key); value != "" {
 			*target, err = strconv.Atoi(value)

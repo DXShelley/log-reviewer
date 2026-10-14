@@ -321,6 +321,7 @@ func Summarize(r *Report, f Filter) ([]*Group, error) {
 }
 
 type Detail struct {
+	Key              string        `json:"key,omitempty"`
 	Remote           *RemoteSource `json:"remote,omitempty"`
 	ContextLine      uint64        `json:"context_line,omitempty"`
 	ContextText      string        `json:"context_text,omitempty"`
@@ -340,7 +341,10 @@ type Detail struct {
 type ContextOptions struct {
 	Before, After  int
 	Keyword, Regex string
+	Summary        bool
 }
+
+var eventKey = regexp.MustCompile(`(?i)(?:trace[_-]?id|request[_-]?id|correlation[_-]?id)["'\s:=]+[\w-]+`)
 
 func ReadDetail(r *Report, rec Record, g *Group, options ...ContextOptions) (Detail, error) {
 	context := ContextOptions{Before: 20, After: 100}
@@ -351,6 +355,23 @@ func ReadDetail(r *Report, rec Record, g *Group, options ...ContextOptions) (Det
 		return Detail{}, errors.New("context lines must be between 0 and 10000")
 	}
 	d := Detail{GroupID: g.ID, Source: r.Sources[rec.Source].Path, Remote: r.Sources[rec.Source].Remote, Offset: rec.Offset, Length: rec.Length, Line: rec.Line, Time: stamp(rec.Time)}
+	if context.Summary {
+		f, err := validatedFile(r, rec.Source)
+		if err != nil {
+			return d, err
+		}
+		defer f.Close()
+		n := rec.Length
+		if n > 4096 {
+			n = 4096
+		}
+		b := make([]byte, n)
+		if _, err = f.ReadAt(b, int64(rec.Offset)); err != nil && err != io.EOF {
+			return d, err
+		}
+		d.Key = eventKey.FindString(string(b))
+		return d, nil
+	}
 	f, err := validatedFile(r, rec.Source)
 	if err != nil {
 		return d, err

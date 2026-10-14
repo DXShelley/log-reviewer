@@ -66,6 +66,16 @@ SFTP POST 示例：`{"host":"192.168.1.20","port":22,"user":"logreader","passwor
 
 ## 推荐分析顺序
 
+### v0.6 工作区接口
+
+`GET /api/details?...&summary=1` 返回同样的分页结构，但 `text/before/after` 为空，仅读取索引和每条最多 4 KiB，用 `key` 返回可识别的请求 ID。通过同样的筛选条件、`offset` 和 `limit=1` 再获取正文；客户端应核对 `source/offset` 防止异步查询变化。
+
+`GET /api/time-export?from=RFC3339&to=RFC3339&mode=merged|files&source=-1` 导出原始时间片段，`merged` 返回文本，`files` 返回 ZIP。时间范围必填，`source` 可省略表示全部；忽略其他分类或关键字条件。包含 INFO 与无时间续行，按报告来源顺序合并。导出先写临时文件，读取失败返回错误而非部分成功下载。
+
+SFTP 请求可增加 `ssh_dir`，未传指纹或 `known_hosts` 时自动读取该目录下的 `known_hosts`；省略目录使用工具运行账户的 `.ssh`。路径属于服务器本机，不属于 HTTP 客户端机器。
+
+CLI `export-time --report report.json --from TIME --to TIME --out FILE` 或 `--out-dir NEW_DIR`，便于 agent 提取多节点证据。边界与无时间日志限制见 [工作区说明](workspace-usage.md)。
+
 1. analyze 输入的稳定日志快照，检查 exit code。
 2. 读取严重级别、高频类别、首次时间、root_cause 与来源分布。
 3. 对候选类别 query 3–10 条样本，检查堆栈和上下文。

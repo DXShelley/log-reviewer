@@ -29,6 +29,7 @@ type Options struct {
 	Passphrase  string `json:"passphrase,omitempty"`
 	Fingerprint string `json:"fingerprint,omitempty"`
 	KnownHosts  string `json:"known_hosts,omitempty"`
+	SSHDir      string `json:"ssh_dir,omitempty"`
 	Path        string `json:"path"`
 	Pattern     string `json:"pattern"`
 	Recursive   bool   `json:"recursive"`
@@ -62,6 +63,17 @@ type Progress struct {
 }
 
 func (o *Options) Validate() error {
+	if o.Fingerprint == "" && o.KnownHosts == "" {
+		dir := o.SSHDir
+		if dir == "" {
+			if home, err := os.UserHomeDir(); err == nil {
+				dir = filepath.Join(home, ".ssh")
+			}
+		}
+		if dir != "" {
+			o.KnownHosts = filepath.Join(dir, "known_hosts")
+		}
+	}
 	if o.Port == 0 {
 		o.Port = 22
 	}
@@ -88,6 +100,11 @@ func (o *Options) Validate() error {
 	}
 	if o.Fingerprint == "" && o.KnownHosts == "" {
 		return errors.New("verified SHA256 host fingerprint or known_hosts file is required")
+	}
+	if o.Fingerprint == "" {
+		if _, err := knownhosts.New(o.KnownHosts); err != nil {
+			return fmt.Errorf("load known_hosts: %w", err)
+		}
 	}
 	if o.Fingerprint != "" && !strings.HasPrefix(o.Fingerprint, "SHA256:") {
 		return errors.New("fingerprint must use SHA256: format")

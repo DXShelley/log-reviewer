@@ -1,0 +1,46 @@
+'use strict';
+(()=>{
+ const css=node('link');css.rel='stylesheet';css.href='enhancements.css';document.head.append(css);
+ const workspace=document.querySelector('.workspace'), controls=node('div',undefined,'view-controls');
+ const layout=node('select');layout.id='layout';layout.setAttribute('aria-label','界面布局');
+ for(const [v,t] of [['horizontal','左右'],['vertical','上下'],['rows','上中下'],['columns','左中右'],['top','上左右'],['dialog','详情弹框']]){const o=node('option',t);o.value=v;layout.append(o)}
+ const context=document.querySelector('.context-controls');controls.append(node('label','布局 '),layout,context);workspace.before(controls);
+ const apply=node('button','应用全部上下文'),reset=node('button','恢复 20 / 100');context.prepend(node('span','总体上下文'));context.append(apply,reset);
+ const viewer=node('section',undefined,'event-viewer');viewer.id='event-viewer';viewer.append(node('p','选择一条事件','empty'));workspace.append(viewer);
+ const dialog=node('dialog');dialog.id='event-dialog';const header=node('div',undefined,'dialog-header'),close=node('button','关闭');header.append(node('h2','日志内容'),close);const body=node('div',undefined,'event-dialog-body');dialog.append(header,body);document.body.append(dialog);close.onclick=()=>dialog.close();
+ const fullscreen=node('dialog'),fullscreenBody=node('div'),exitFullscreen=node('button','退出全屏');fullscreen.id='fullscreen-dialog';fullscreen.append(exitFullscreen,fullscreenBody);document.body.append(fullscreen);let fullscreenTarget;exitFullscreen.onclick=()=>fullscreen.close();fullscreen.onclose=()=>{if(fullscreenTarget){fullscreenTarget.replaceChildren(...fullscreenBody.childNodes);fullscreenTarget=null}};const overrides=new Map();$('analyze').addEventListener('click',()=>overrides.clear());let opened=null;resetEventView=()=>{if(fullscreen.open)fullscreen.close();opened=null;body.replaceChildren();viewer.replaceChildren(node('p','选择一条事件','empty'));if(dialog.open)dialog.close()};
+ function store(k,v){try{localStorage.setItem(k,v)}catch{}}
+ function restore(k,fallback){try{return localStorage.getItem(k)||fallback}catch{return fallback}}
+ for(const [id,fallback] of [['context-before','20'],['context-after','100']]){$(id).value=restore(id,fallback);$(id).onchange=null}
+ function defaults(){const before=Number($('context-before').value),after=Number($('context-after').value);if(![$('context-before').value,$('context-after').value].every(Boolean)||![before,after].every(n=>Number.isInteger(n)&&n>=0&&n<=10000))throw Error('上下文行数应为 0–10000 的整数');return {before,after}}
+ apply.onclick=()=>{try{defaults();for(const id of ['context-before','context-after'])store(id,$(id).value);overrides.clear();loadDetails();toast('已应用到全部分类与事件')}catch(e){error(e)}};
+ reset.onclick=()=>{$('context-before').value=20;$('context-after').value=100;apply.click()};
+ function setLayout(){workspace.dataset.layout=layout.value;store('lr-layout',layout.value);if(dialog.open)dialog.close();if(opened)loadDetails()}
+ layout.value=restore('lr-layout','horizontal');if(!layout.value)layout.value='horizontal';layout.onchange=setLayout;setLayout();
+ let depth=0;const drop=node('div','释放以导入日志文件','drop-overlay');drop.hidden=true;document.body.append(drop);
+ document.addEventListener('dragenter',e=>{if(Array.from(e.dataTransfer?.types||[]).includes('Files')){depth++;drop.hidden=false;drop.textContent=busy||importing?'当前任务结束后可导入':'释放以导入日志文件'}});
+ document.addEventListener('dragleave',()=>{if(--depth<=0){depth=0;drop.hidden=true}});
+ document.addEventListener('drop',()=>{depth=0;drop.hidden=true});window.addEventListener('blur',()=>{depth=0;drop.hidden=true});
+ $('upload-button').title='选择文件或将多个文件拖入窗口';
+ const exportMode=node('select');exportMode.id='time-export-mode';exportMode.setAttribute('aria-label','时间片段导出方式');for(const [v,t] of [['merged','时间片段 · 合并'],['files','时间片段 · 分文件 ZIP']]){const o=node('option',t);o.value=v;exportMode.append(o)}
+ const exportButton=node('button','导出时间片段');exportButton.type='button';$('search').append(exportMode,exportButton);
+ exportButton.onclick=async()=>{try{if(!report)throw Error('请先分析日志');if(!$('from').value||!$('to').value)throw Error('请选择开始和结束时间');const q=params();for(const key of ['group','level','keyword','regex'])q.delete(key);q.set('mode',exportMode.value);exportButton.disabled=true;await download('time-export?'+q,exportMode.value==='files'?'log-reviewer-time.zip':'log-reviewer-time.txt')}catch(e){error(e)}finally{exportButton.disabled=false}};
+ const sshLabel=node('label','工具所在机器的 .ssh 目录');sshLabel.className='remote-wide';const ssh=node('input');ssh.id='remote-ssh-dir';ssh.placeholder='留空使用当前账户的 .ssh';sshLabel.append(ssh);$('remote-fingerprint').required=false;$('remote-fingerprint').placeholder='可留空，使用 .ssh/known_hosts';$('remote-fingerprint').parentElement.after(sshLabel);
+ loadDetails=async function(){
+  if(!selected)return;const g=selected,v=++detailVersion;opened=null;body.replaceChildren();viewer.replaceChildren(node('p','选择一条事件','empty'));
+  $('detail').hidden=false;$('detail-empty').hidden=true;$('detail-level').replaceChildren(badge(g.level));$('detail-title').textContent=g.title;$('impact-basis').textContent=g.impact+' · '+g.impact_basis;$('scope').textContent=g.sources.length+' 个文件 · '+fmt(g.count)+' 次';$('copy-group').disabled=false;$('export').disabled=false;$('occurrences').replaceChildren(node('p','读取事件…','empty'));$('prev').disabled=true;$('next').disabled=true;
+  try{defaults();const q=params(g.id);q.set('offset',page*PAGE);q.set('limit',PAGE);q.set('summary','1');const data=await json('details?'+q);if(v!==detailVersion)return;more=data.more;$('prev').disabled=page===0;$('next').disabled=!more;$('occurrence-range').textContent=data.details.length?`${page*PAGE+1}–${page*PAGE+data.details.length} / ${fmt(g.count)} 次`:'无匹配事件';$('occurrences').replaceChildren();
+   data.details.forEach((d,i)=>{
+    const box=node('details',undefined,'occurrence'),head=node('summary',undefined,'occurrence-head');const identity=d.source+':'+d.offset;head.append(node('span',basename(d.remote?.path||d.source)+' · 起始行 '+d.line+' · '+date(d.time)),node('span',d.key||'定位 '+d.offset,'event-id'));head.title=d.source+' · '+(g.root_cause||g.title);box.append(head);const content=node('div');box.append(content);$('occurrences').append(box);
+    let request=0;
+    async function expand(){const serial=++request;opened=identity;const range=overrides.get(identity)||defaults();content.replaceChildren(node('p','读取内容…'));const baseTarget=['columns','rows','top'].includes(layout.value)?viewer:layout.value==='dialog'?body:content;const target=fullscreen.open&&fullscreenTarget===baseTarget?fullscreenBody:baseTarget;target.replaceChildren(node('p','读取内容…'));if(layout.value==='dialog'&&!dialog.open)dialog.showModal();
+     try{const query=params(g.id);query.set('offset',page*PAGE+i);query.set('limit',1);query.set('before',range.before);query.set('after',range.after);const result=await json('details?'+query);if(v!==detailVersion||serial!==request||!box.open||(['columns','rows','top','dialog'].includes(layout.value)&&opened!==identity))return;const detail=result.details[0];if(!detail||detail.source!==d.source||detail.offset!==d.offset)throw Error('事件已变化，请重新查询');target.replaceChildren();if(target!==content)content.replaceChildren(node('p','已在内容面板显示','event-id'));const toolbar=node('div',undefined,'event-tools'),before=node('input'),after=node('input');for(const [input,value] of [[before,range.before],[after,range.after]]){input.type='number';input.min=0;input.max=10000;input.value=value}before.setAttribute('aria-label','单条前文行数');after.setAttribute('aria-label','单条后文行数');const update=node('button','查询'),inherit=node('button','使用总体'),copyButton=node('button','复制'),full=node('button','⛶');full.title='全屏浏览日志内容';toolbar.append(node('span',basename(d.remote?.path||d.source)+':'+d.line),node('label','前 '),before,node('label','后 '),after,update,inherit,copyButton,full);target.append(toolbar);
+      const text=[detail.before,detail.context_text||detail.text,detail.after].filter(Boolean).join('\n');const pre=node('pre',text,'log-text');target.append(pre);if(detail.context_text)target.append(node('p','完整事件'),node('pre',detail.text,'log-text'));const match=detail.text.match(/(?:trace[_-]?id|request[_-]?id|correlation[_-]?id)["'\s:=]+([\w-]+)/i);target.append(node('p',match?'唯一性关键字：'+match[0]:'事件定位：'+identity,'event-id'));if(detail.truncated||detail.context_truncated)target.append(node('p','内容超过显示上限，已截断；完整内容可导出','truncated'));
+      update.onclick=()=>{const b=Number(before.value),a=Number(after.value);if(!before.value||!after.value||![b,a].every(n=>Number.isInteger(n)&&n>=0&&n<=10000)){error(Error('上下文行数应为 0–10000 的整数'));return}overrides.set(identity,{before:b,after:a});expand()};inherit.onclick=()=>{overrides.delete(identity);expand()};copyButton.onclick=()=>copy(text);full.onclick=async()=>{if(document.fullscreenElement){await document.exitFullscreen();return}if(target.requestFullscreen){try{await target.requestFullscreen();return}catch{}}fullscreenTarget=target;fullscreenBody.replaceChildren(...target.childNodes);fullscreen.showModal()};
+     }catch(e){if(serial===request&&v===detailVersion){target.replaceChildren(node('p',e.message,'dialog-error'));error(e)}}
+    }
+    box.ontoggle=()=>{if(box.open)expand();else request++};
+   });
+  }catch(e){if(v===detailVersion)error(e)}
+ };
+})();

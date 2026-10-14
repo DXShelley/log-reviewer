@@ -1,0 +1,33 @@
+const {chromium}=require('playwright');
+const {spawn}=require('child_process');
+const fs=require('fs'),path=require('path'),assert=require('assert');
+async function main(){
+ const root=path.resolve(__dirname,'..'),child=spawn(path.join(root,'dist/log-reviewer-windows-amd64.exe'),['gui','--no-browser','--port','0'],{cwd:root,windowsHide:true});
+ let output='',browser,context;
+ try{
+  const url=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('startup timeout')),10000);child.stdout.on('data',b=>{output+=b;const m=output.match(/GUI: (http:\/\/\S+)/);if(m){clearTimeout(timer);resolve(m[1])}});child.on('error',reject)});
+  browser=await chromium.connectOverCDP('http://127.0.0.1:9222',{timeout:5000});context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});await context.addInitScript(()=>window.showSaveFilePicker=undefined);
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(url,{timeout:10000});
+  const input='2026-10-14 12:29:00 INFO app : before\n2026-10-14 12:30:00 ERROR app : requestId=abc failed\njava.lang.IllegalStateException: broken\n at app.run(Main.java:42)\n2026-10-14 12:31:00 WARN app : slow\n2026-10-14 12:32:00 INFO app : after\n';
+  await page.evaluate(text=>{const dt=new DataTransfer();dt.items.add(new File([text],'node-a.log'));dt.items.add(new File([text],'node-b.log'));document.dispatchEvent(new DragEvent('dragenter',{dataTransfer:dt,bubbles:true}));document.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}))},input);
+  await page.waitForFunction(()=>document.getElementById('file-count').textContent==='2 个文件 / 路径');assert(!await page.locator('.drop-overlay').isVisible());await page.locator('#analyze').click();await page.waitForFunction(()=>document.querySelectorAll('.group-row').length===2);
+  await page.locator('.group-row').filter({hasText:'ERROR'}).click();await page.waitForFunction(()=>document.querySelectorAll('#occurrences>.occurrence').length===2);assert(await page.locator('#occurrences .log-text').count()===0);assert((await page.locator('#occurrences').innerText()).includes('requestId=abc'));
+  async function expand(){await page.locator('#occurrences>.occurrence>summary').first().click();await page.waitForFunction(()=>!!document.querySelector('.event-tools'));}
+  await expand();assert((await page.locator('#occurrences .log-text').innerText()).includes('Main.java:42'));
+  await page.locator('#context-before').fill('0');await page.locator('#context-after').fill('0');await page.getByRole('button',{name:'应用全部上下文'}).click();await page.waitForFunction(()=>!document.querySelector('.event-tools'));await expand();assert(!(await page.locator('#occurrences .log-text').innerText()).includes('before'));
+  await page.getByLabel('单条前文行数').fill('1');await page.getByRole('button',{name:'查询',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#occurrences .log-text')?.textContent.includes('before'));
+  await page.locator('.group-row').filter({hasText:'WARN'}).click();await page.waitForFunction(()=>!document.querySelector('.event-tools'));await expand();assert(!(await page.locator('#occurrences .log-text').innerText()).includes('after'));await page.getByRole('button',{name:'恢复 20 / 100'}).click();
+  fs.mkdirSync(path.join(root,'reports'),{recursive:true});
+  for(const layout of ['horizontal','vertical','rows','columns','top','dialog']){
+   await page.locator('#layout').selectOption(layout);await page.waitForFunction(()=>!document.querySelector('.event-tools'));await expand();const selector=layout==='dialog'?'#event-dialog .log-text':['rows','columns','top'].includes(layout)?'#event-viewer .log-text':'#occurrences .log-text';await page.locator(selector).waitFor();assert((await page.locator(selector).innerText()).includes('slow'));await page.screenshot({path:path.join(root,'reports','layout-'+layout+'.png'),fullPage:true});if(layout==='dialog')await page.locator('#event-dialog .dialog-header button').click();
+  }
+  await page.locator('#layout').selectOption('horizontal');await page.waitForFunction(()=>!document.querySelector('.event-tools'));await expand();await page.getByTitle('全屏浏览日志内容').click();await page.waitForFunction(()=>!!document.fullscreenElement||document.getElementById('event-dialog').open);if(await page.evaluate(()=>!!document.fullscreenElement))await page.evaluate(()=>document.exitFullscreen());else await page.locator('#event-dialog .dialog-header button').click();
+  await page.evaluate(()=>Element.prototype.requestFullscreen=()=>Promise.reject(Error('unsupported')));await page.getByTitle('全屏浏览日志内容').click();await page.locator('#fullscreen-dialog').waitFor();await page.locator('#fullscreen-dialog').getByLabel('单条后文行数').fill('0');await page.locator('#fullscreen-dialog').getByRole('button',{name:'查询',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#fullscreen-dialog .log-text')&&!document.querySelector('#fullscreen-dialog .log-text').textContent.includes('after'));await page.getByRole('button',{name:'退出全屏'}).click();
+  await page.locator('#from').evaluate(e=>e.value='2026-10-14T12:29:00');await page.locator('#to').evaluate(e=>e.value='2026-10-14T12:30:00');
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:10000}),page.getByRole('button',{name:'导出时间片段'}).click()]);const text=fs.readFileSync(await download.path(),'utf8');assert(text.split('INFO app : before').length===3);assert(!text.includes('slow'));assert(text.split('Main.java:42').length===3);
+  await page.locator('#time-export-mode').selectOption('files');const [zip]=await Promise.all([page.waitForEvent('download',{timeout:10000}),page.getByRole('button',{name:'导出时间片段'}).click()]);assert(fs.readFileSync(await zip.path()).subarray(0,2).toString()==='PK');
+  await page.setViewportSize({width:390,height:844});for(const layout of ['horizontal','columns','top','rows']){await page.locator('#layout').selectOption(layout);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile overflow '+layout)}await page.screenshot({path:path.join(root,'reports','workspace-mobile.png'),fullPage:true});assert(errors.length===0,errors.join('\n'));
+  console.log('Workspace passed: drag multi-file, lazy summaries, global/per-event context, six layouts, full screen, merged/ZIP time exports, mobile');
+ }finally{if(context)await context.close();if(browser)await browser.close();child.kill()}
+}
+main().catch(e=>{console.error(e);process.exitCode=1});
