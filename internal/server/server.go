@@ -360,6 +360,12 @@ func (s *Server) details(w http.ResponseWriter, r *http.Request) {
 	}
 	context := logs.ContextOptions{Before: 20, After: 100}
 	context.Summary = r.URL.Query().Get("summary") == "1"
+	mode := r.URL.Query().Get("context")
+	if mode != "" && mode != "auto" && mode != "manual" {
+		fail(w, 400, errors.New("context must be auto or manual"))
+		return
+	}
+	context.Auto = mode == "auto"
 	for key, target := range map[string]*int{"before": &context.Before, "after": &context.After} {
 		if value := r.URL.Query().Get(key); value != "" {
 			*target, err = strconv.Atoi(value)

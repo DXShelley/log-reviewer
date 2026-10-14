@@ -7,7 +7,7 @@ async function main(){
  try{
   const url=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('startup timeout')),10000);child.stdout.on('data',b=>{output+=b;const m=output.match(/GUI: (http:\/\/\S+)/);if(m){clearTimeout(timer);resolve(m[1])}});child.on('error',reject)});
   browser=await chromium.connectOverCDP('http://127.0.0.1:9222',{timeout:5000});context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});await context.addInitScript(()=>window.showSaveFilePicker=undefined);
-  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(url,{timeout:10000});
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(url,{timeout:10000});await page.locator('#context-auto').uncheck();
   const input='2026-10-14 12:29:00 INFO app : before\n2026-10-14 12:30:00 ERROR app : requestId=abc failed\njava.lang.IllegalStateException: broken\n at app.run(Main.java:42)\n2026-10-14 12:31:00 WARN app : slow\n2026-10-14 12:32:00 INFO app : after\n';
   await page.evaluate(text=>{const dt=new DataTransfer();dt.items.add(new File([text],'node-a.log'));dt.items.add(new File([text],'node-b.log'));document.dispatchEvent(new DragEvent('dragenter',{dataTransfer:dt,bubbles:true}));document.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}))},input);
   await page.waitForFunction(()=>document.getElementById('file-count').textContent==='2 个文件 / 路径');assert(!await page.locator('.drop-overlay').isVisible());await page.locator('#analyze').click();await page.waitForFunction(()=>document.querySelectorAll('.group-row').length===2);

@@ -44,7 +44,7 @@ log-reviewer serve --no-browser --port 8765 --keep-cache
 | `GET /api/status` | busy、bytes、total、events、lines、error、ready；完成时附 report |
 | `POST /api/cancel` | 取消正在进行的分析 |
 | `GET /api/groups` | group、level、keyword、regex、from、to、source，返回筛选后的分类与次数 |
-| `GET /api/details` | 同上，另有 offset（默认 0）、limit（默认 20，上限 100）、before（默认 20）、after（默认 100），上下文行数范围 0–10000；summary=1 仅返回摘要 |
+| `GET /api/details` | 同上，另有 offset（默认 0）、limit（默认 20，上限 100）、before（默认 20）、after（默认 100），范围 0–10000；context=auto 或 manual（默认），summary=1 仅返回摘要 |
 | `GET /api/export` | 同上，返回符合条件的完整原始事件文本 |
 | `GET /api/time-export` | from/to 必填，mode=merged 或 files，source 可选；返回原始时间片段文本或分文件 ZIP |
 | `GET /api/report` | 完整 JSON 报告 |
@@ -66,6 +66,8 @@ SFTP POST 示例：`{"host":"192.168.1.20","port":22,"user":"logreader","passwor
 报告 sources[].remote 与详情 remote 可追溯服务器、端口、远程路径、获取时间和原始修改时间。changed=true 表示获取期间文件变化，不能把它当成强一致快照。CLI 可直接 fetch --analyze 输出同样的报告给 agent。详见 [SFTP 说明](sftp-usage.md)。
 
 ## 摘要与时间片段接口
+
+v0.7.0 详情查询增加 `context=auto|manual`，省略时保持手动行为；CLI 使用 `query --details --auto-context`。`before/after` 在自动模式下是扫描上限。详情增加 `context_mode`、`context_reason`、`context_before` 和 `context_after`，后两者为实际返回行数。GUI 默认请求自动模式，单条覆盖请求手动模式。算法边界和局限见 [工作区说明](workspace-usage.md)，不能把自动范围当作因果结论。原始时间片段导出不使用该裁剪。
 
 `GET /api/details?...&summary=1` 返回同样的分页结构，但 `text/before/after` 为空，仅读取索引和每条最多 4 KiB，用 `key` 返回可识别的请求 ID。通过同样的筛选条件、`offset` 和 `limit=1` 再获取正文；客户端应核对 `source/offset` 防止异步查询变化。
 

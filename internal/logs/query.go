@@ -321,6 +321,10 @@ func Summarize(r *Report, f Filter) ([]*Group, error) {
 }
 
 type Detail struct {
+	ContextMode      string        `json:"context_mode,omitempty"`
+	ContextReason    string        `json:"context_reason,omitempty"`
+	ContextBefore    int           `json:"context_before"`
+	ContextAfter     int           `json:"context_after"`
 	Key              string        `json:"key,omitempty"`
 	Remote           *RemoteSource `json:"remote,omitempty"`
 	ContextLine      uint64        `json:"context_line,omitempty"`
@@ -342,6 +346,7 @@ type ContextOptions struct {
 	Before, After  int
 	Keyword, Regex string
 	Summary        bool
+	Auto           bool
 }
 
 var eventKey = regexp.MustCompile(`(?i)(?:trace[_-]?id|request[_-]?id|correlation[_-]?id)["'\s:=]+[\w-]+`)
@@ -418,6 +423,12 @@ func ReadDetail(r *Report, rec Record, g *Group, options ...ContextOptions) (Det
 	if err != nil {
 		return d, err
 	}
+	d.ContextMode = "manual"
+	if context.Auto {
+		d.Before, d.After, d.ContextReason = automaticContext(d.Text, d.Before, d.After, rec.Time)
+		d.ContextMode = "auto"
+	}
+	d.ContextBefore, d.ContextAfter = contextLines(d.Before), contextLines(d.After)
 	return d, nil
 }
 
