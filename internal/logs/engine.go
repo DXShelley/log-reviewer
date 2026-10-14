@@ -21,13 +21,15 @@ const RecordSize = 40
 const maxPreview = 64 * 1024
 
 type Source struct {
-	Path     string `json:"path"`
-	Size     int64  `json:"size"`
-	Modified int64  `json:"modified"`
-	Lines    uint64 `json:"lines"`
-	Events   uint64 `json:"events"`
+	Languages []string `json:"languages"`
+	Path      string   `json:"path"`
+	Size      int64    `json:"size"`
+	Modified  int64    `json:"modified"`
+	Lines     uint64   `json:"lines"`
+	Events    uint64   `json:"events"`
 }
 type Group struct {
+	Languages   []string   `json:"languages"`
 	ID          string     `json:"id"`
 	Number      uint32     `json:"number"`
 	Level       string     `json:"level"`
@@ -74,9 +76,10 @@ type Progress struct {
 	Cancel atomic.Bool
 }
 type Options struct {
-	All      bool
-	Rules    []Rule
-	Progress *Progress
+	Languages []LanguageRule
+	All       bool
+	Rules     []Rule
+	Progress  *Progress
 }
 type Record struct {
 	Group, Source        uint32
@@ -169,6 +172,24 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(opt.Languages) > 0 {
+		byID := map[string]LanguageRule{}
+		for _, r := range p.languages {
+			byID[r.ID] = r
+		}
+		for _, r := range opt.Languages {
+			byID[r.ID] = r
+		}
+		var merged []LanguageRule
+		for _, r := range byID {
+			merged = append(merged, r)
+		}
+		sort.Slice(merged, func(i, j int) bool { return merged[i].ID < merged[j].ID })
+		p.languages, err = compileLanguages(merged)
+		if err != nil {
+			return nil, err
+		}
+	}
 	paths, err = ExpandPaths(paths)
 	if err != nil {
 		return nil, err
@@ -188,7 +209,7 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 		}
 	}()
 	w := bufio.NewWriterSize(f, 1024*1024)
-	report := &Report{Schema: "log-reviewer/v1", Version: "0.1.0", Created: time.Now().Format(time.RFC3339), Formats: map[string]uint64{}, Groups: []*Group{}, Sources: []Source{}, IndexPath: f.Name(), Notes: []string{"Impact is a heuristic based on log severity; business impact is not inferred.", "Scope lists observed files and logger/service names, not affected users.", "Local timestamps without offsets use the scanning machine's local timezone.", "Grouping masks numeric values and IDs; inspect occurrences before assuming identical causes."}}
+	report := &Report{Schema: "log-reviewer/v1", Version: "0.2.0", Created: time.Now().Format(time.RFC3339), Formats: map[string]uint64{}, Groups: []*Group{}, Sources: []Source{}, IndexPath: f.Name(), Notes: []string{"Impact is a heuristic based on log severity; business impact is not inferred.", "Scope lists observed files and logger/service names, not affected users.", "Local timestamps without offsets use the scanning machine's local timezone.", "Grouping masks numeric values and IDs; inspect occurrences before assuming identical causes."}}
 	for _, path := range paths {
 		st, err := os.Stat(path)
 		if err != nil {
@@ -203,9 +224,11 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 	groups := map[string]*Group{}
 	type cached struct{ sig, root string }
 	sigCache := map[string]cached{}
+	languageCache := map[string][]string{}
 	var buf [RecordSize]byte
 	for si := range report.Sources {
 		src := &report.Sources[si]
+		src.Languages = []string{}
 		in, err := os.Open(src.Path)
 		if err != nil {
 			return nil, err
@@ -226,9 +249,33 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 				return nil
 			}
 			text := string(preview)
+			languages, languageCached := languageCache[text]
+			if !languageCached {
+				languages = p.Languages(text)
+				if len(languageCache) >= 1024 {
+					languageCache = map[string][]string{}
+				}
+				if len(text) <= 8192 {
+					languageCache[text] = languages
+				}
+			}
+			for _, language := range languages {
+				if !containsLanguage(src.Languages, language) {
+					src.Languages = append(src.Languages, language)
+					sort.Strings(src.Languages)
+				}
+			}
+			if header.Format == "go/panic" && !containsLanguage(languages, "go") {
+				languages = append(append([]string{}, languages...), "go")
+				sort.Strings(languages)
+				if !containsLanguage(src.Languages, "go") {
+					src.Languages = append(src.Languages, "go")
+					sort.Strings(src.Languages)
+				}
+			}
 			cache, found := sigCache[text]
 			if !found {
-				cache.sig, cache.root = signature(text)
+				cache.sig, cache.root = p.signature(text, languages)
 				if len(sigCache) >= 1024 {
 					sigCache = map[string]cached{}
 				}
@@ -238,6 +285,7 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 			}
 			sig, root := cache.sig, cache.root
 			key := header.Level + "\x00" + header.Logger + "\x00" + sig
+			key += "\x00" + strings.Join(languages, ",")
 			g := groups[key]
 			if g == nil {
 				if len(groups) >= 100000 {
@@ -259,6 +307,7 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 				}
 				g = &Group{ID: hex.EncodeToString(hash[:8]), Number: uint32(len(report.Groups) + 1), Level: header.Level, Title: sig, RootCause: root, Sources: []int{}, Loggers: []string{}, Impact: impact, ImpactBasis: basis, Format: header.Format}
 				groups[key] = g
+				g.Languages = languages
 				report.Groups = append(report.Groups, g)
 			}
 			g.Count++
@@ -320,6 +369,9 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 				}
 				if len(b) > 0 {
 					h, ok := p.Parse(b, opt.All)
+					if h.Attach && pending != nil {
+						ok = false
+					}
 					if ok && h.Format == "python/traceback" && pending != nil && header.Level == "ERROR" {
 						ok = false
 					}

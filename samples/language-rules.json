@@ -1,0 +1,10 @@
+[
+  {
+    "id": "custom-runtime",
+    "evidence": "MyRuntime(?:Error|Warning):",
+    "start": "^MyRuntimeError:",
+    "level": "ERROR",
+    "warning": "^MyRuntimeWarning:",
+    "root": "(?m)^MyRuntimeError:[^\\n]*"
+  }
+]

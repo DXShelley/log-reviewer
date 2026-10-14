@@ -1,0 +1,1 @@
+{"id":"dart","evidence":"(?:\\.dart:\\d+:\\d+|Unhandled Exception:|package:flutter/)","start":"^Unhandled Exception:","level":"ERROR"}

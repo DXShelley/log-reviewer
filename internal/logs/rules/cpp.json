@@ -1,0 +1,1 @@
+{"id":"cpp","evidence":"(?:terminate called after throwing|std::(?:runtime_error|bad_alloc|out_of_range)|\\.cpp:\\d+|\\.cc:\\d+)","start":"^terminate called after throwing","level":"FATAL"}

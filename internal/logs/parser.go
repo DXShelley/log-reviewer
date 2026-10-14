@@ -18,11 +18,13 @@ type Rule struct {
 	re         *regexp.Regexp
 }
 type Header struct {
+	Attach                         bool
 	Level, Message, Logger, Format string
 	Time                           int64
 	HasTime                        bool
 }
 type Parser struct {
+	languages []LanguageRule
 	Rules     []Rule
 	lastStamp string
 	lastTime  int64
@@ -30,6 +32,14 @@ type Parser struct {
 
 func NewParser(rules []Rule) (*Parser, error) {
 	p := &Parser{Rules: rules}
+	builtin, err := BuiltinLanguages()
+	if err != nil {
+		return nil, err
+	}
+	p.languages, err = compileLanguages(builtin)
+	if err != nil {
+		return nil, err
+	}
 	for i := range p.Rules {
 		r := &p.Rules[i]
 		var err error
@@ -71,11 +81,11 @@ func (p *Parser) Parse(b []byte, all bool) (Header, bool) {
 	if len(b) == 0 {
 		return Header{}, false
 	}
-	if bytes.HasPrefix(b, []byte("Traceback (most recent call last):")) {
-		return Header{Level: "ERROR", Message: string(b), Format: "python/traceback"}, true
+	if bareException.Match(b) {
+		return Header{Level: "ERROR", Message: string(b), Format: "exception", Attach: true}, true
 	}
-	if bytes.HasPrefix(b, []byte("panic:")) {
-		return Header{Level: "FATAL", Message: string(b[6:]), Format: "go/panic"}, true
+	if h, ok := p.languageStart(b); ok {
+		return h, true
 	}
 	if b[0] == '{' {
 		if h, ok := p.parseJSON(b); ok {
@@ -356,6 +366,7 @@ func (p *Parser) parseTime(s, layout string) (int64, bool) {
 var volatile = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b0x[0-9a-f]+\b|\b[0-9a-f]{16,}\b|\b\d+(?:\.\d+)*(?:ms|us|ns|s|mb|gb)?\b`)
 var exception = regexp.MustCompile(`(?:[A-Za-z_$][\w$]*\.)*(?:[A-Za-z_$][\w$]*)?(?:Exception|Error|Panic)\b`)
 var ansi = regexp.MustCompile(`\x1b\[[0-9;]*[mK]`)
+var bareException = regexp.MustCompile(`^(?:[A-Za-z_$][\w$]*[.:])*(?:[A-Za-z_$][\w$]*)?(?:Exception|Error):(?:\s|$)`)
 
 func signature(message string) (string, string) {
 	root := ""

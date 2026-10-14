@@ -127,7 +127,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	}
 	output(w, v)
 }
-func (s *Server) Start(paths []string, all bool, rules []logs.Rule) error {
+func (s *Server) Start(paths []string, all bool, rules []logs.Rule, languages ...logs.LanguageRule) error {
 	s.mu.Lock()
 	if s.busy {
 		s.mu.Unlock()
@@ -141,7 +141,7 @@ func (s *Server) Start(paths []string, all bool, rules []logs.Rule) error {
 	s.mu.Unlock()
 	go func() {
 		defer s.jobs.Done()
-		r, err := logs.Analyze(paths, s.dir, logs.Options{All: all, Rules: rules, Progress: p})
+		r, err := logs.Analyze(paths, s.dir, logs.Options{All: all, Rules: rules, Languages: languages, Progress: p})
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.busy = false
@@ -167,10 +167,11 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Paths   []string    `json:"paths"`
-		Uploads []string    `json:"uploads"`
-		All     bool        `json:"all"`
-		Rules   []logs.Rule `json:"rules"`
+		Paths     []string            `json:"paths"`
+		Uploads   []string            `json:"uploads"`
+		All       bool                `json:"all"`
+		Rules     []logs.Rule         `json:"rules"`
+		Languages []logs.LanguageRule `json:"languages"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024)).Decode(&req); err != nil {
 		fail(w, 400, err)
@@ -195,7 +196,7 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, err)
 		return
 	}
-	if err := s.Start(req.Paths, req.All, req.Rules); err != nil {
+	if err := s.Start(req.Paths, req.All, req.Rules, req.Languages...); err != nil {
 		fail(w, 409, err)
 		return
 	}

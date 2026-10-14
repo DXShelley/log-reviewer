@@ -1,0 +1,1 @@
+{"id":"kotlin","evidence":"(?:\\.kt:\\d+\\)|kotlin\\.[\\w.]+(?:Exception|Error))"}

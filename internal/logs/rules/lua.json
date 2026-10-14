@@ -1,0 +1,1 @@
+{"id":"lua","evidence":"(?:\\.lua:\\d+:|stack traceback:)","start":"^lua: .*\\.lua:\\d+:","level":"ERROR"}

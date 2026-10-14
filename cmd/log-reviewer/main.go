@@ -17,7 +17,7 @@ import (
 	"log-reviewer/internal/server"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -34,6 +34,14 @@ func run(args []string) error {
 		return gui(args[1:])
 	case "analyze":
 		return analyze(args[1:])
+	case "languages":
+		r, err := logs.BuiltinLanguages()
+		if err != nil {
+			return err
+		}
+		e := json.NewEncoder(os.Stdout)
+		e.SetIndent("", "  ")
+		return e.Encode(r)
 	case "query", "export":
 		return query(args[0], args[1:])
 	case "version", "--version":
@@ -47,11 +55,13 @@ func run(args []string) error {
 	}
 }
 
-const help = `Log Reviewer 0.1.0 - local, streaming log classification
+const help = `Log Reviewer 0.2.0 - local, streaming log classification
 
   log-reviewer                              Open local GUI
   log-reviewer gui [--port 8765] [--no-browser] [files...]
   log-reviewer analyze [--out report.json] [--all] [--rules rules.json] files...
+  log-reviewer languages                     Export built-in language rules as JSON
+  log-reviewer analyze --language-rules languages.json [files...]
   log-reviewer query --report report.json [filters] [--details] [--offset 0] [--limit 20]
   log-reviewer export --report report.json [filters] [--out errors.txt]
 
@@ -79,6 +89,7 @@ func analyze(args []string) error {
 	out := f.String("out", "report.json", "report path")
 	all := f.Bool("all", false, "include INFO/DEBUG/TRACE")
 	rulePath := f.String("rules", "", "custom rule file")
+	languagePath := f.String("language-rules", "", "language rule overrides JSON array")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
@@ -86,11 +97,21 @@ func analyze(args []string) error {
 	if err != nil {
 		return err
 	}
+	var languages []logs.LanguageRule
+	if *languagePath != "" {
+		b, err := os.ReadFile(*languagePath)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(b, &languages); err != nil {
+			return err
+		}
+	}
 	abs, err := filepath.Abs(*out)
 	if err != nil {
 		return err
 	}
-	report, err := logs.Analyze(f.Args(), filepath.Dir(abs), logs.Options{All: *all, Rules: r})
+	report, err := logs.Analyze(f.Args(), filepath.Dir(abs), logs.Options{All: *all, Rules: r, Languages: languages})
 	if err != nil {
 		return err
 	}

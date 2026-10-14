@@ -1,0 +1,1 @@
+{"id":"typescript","evidence":"(?:\\bat [^\\n]*\\.tsx?:\\d+:\\d+|error TS\\d+:)","start":"^.*error TS\\d+:","level":"ERROR","root":"(?m)^(?:\\w*Error):[^\\n]*$"}

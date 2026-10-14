@@ -1,0 +1,1 @@
+{"id":"csharp","evidence":"(?:System\\.[\\w.]+Exception|\\bin [^\\n]*\\.cs:line \\d+|--- End of (?:inner exception|stack trace))","start":"^Unhandled exception\\.","level":"FATAL"}
