@@ -1,6 +1,6 @@
 # Log Reviewer
 
-v0.4.0 支持服务器远程访问：默认监听所有 IPv4 网卡并尝试 IPv6，端口占用时自动分配，输出最终访问地址。无桌面环境使用 `gui --no-browser`。详见 [服务器使用与优化建议](docs/server-usage.md)。独立语言规则管理见 [语言规则说明](docs/language-rules.md)。
+v0.5.0 新增 SFTP 文件与目录获取：密码/私钥认证、主机密钥校验、过滤与递归、限额、进度与取消，获取后可自动分析并保留远程来源。详见 [SFTP 使用说明](docs/sftp-usage.md)。服务器访问见 [服务器说明](docs/server-usage.md)，独立语言规则管理见 [语言规则说明](docs/language-rules.md)。
 
 实用、简洁的本地日志分类工具。单个二进制同时提供 terminal 和浏览器 GUI，无需安装运行时、数据库或日志平台。日志不会发送到云端。
 
@@ -78,7 +78,7 @@ Linux / macOS 使用对应平台的文件，先执行 `chmod +x log-reviewer-*`�
 
 ## 开发与构建
 
-仅依赖 Go 标准库，Go 1.23+。源码、文档、测试、样例、脚本都在 `dev` 分支；`main` 为交付说明面。
+构建需要 Go 1.25+，SFTP 使用 pkg/sftp 与 x/crypto/ssh，版本锁定在 go.mod/go.sum。运行仍是独立二进制，CGO 关闭。源码、文档、测试、样例、脚本都在 `dev` 分支；`main` 为交付说明面。第三方许可见 [依赖说明](docs/THIRD_PARTY_NOTICES.md)。
 
 开发前执行 `git switch dev`。`main` 只包含交付说明、样例和六个平台二进制。
 
@@ -93,3 +93,10 @@ Linux / macOS 可运行 `sh scripts/build.sh`。产物覆盖 Windows / Linux / m
 实测生成工具：`go run ./tools/bench --dir <有足够空间的临时目录> --gib 1`，或加 `--dense` 生成全 ERROR 日志。生成的文件是真实写入的日志，不是稀疏文件。
 
 GUI 自动验证：配置 `NODE_PATH` 指向已有 Playwright 包，运行 `node tests/gui-smoke.cjs`；连接 `127.0.0.1:9222` Chrome，创建独立浏览器 context。
+
+SFTP 端到端验证使用自带的本地测试服务器，不连接真实业务服务器：
+
+```powershell
+go build -o .work/sftp-fixture.exe ./tests/sftp-fixture
+node tests/ui-sftp.cjs
+```

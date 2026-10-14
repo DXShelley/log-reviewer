@@ -49,10 +49,20 @@ log-reviewer serve --no-browser --port 8765 --keep-cache
 | `GET /api/report` | 完整 JSON 报告 |
 | `GET /api/browse?path=...` | 本机文件选择；path=roots 列磁盘 / 根目录 |
 | `POST /api/upload?name=...` | body 为原始文件，返回 upload id；analyze 的 uploads 可引用该 ID |
+| `POST /api/remote-fetch` | SFTP 连接与选择配置，返回任务 id，异步获取 |
+| `GET /api/remote-fetch` | 当前获取任务的 busy、stage、bytes、total、files、total_files、downloads、warnings、error |
+| `DELETE /api/remote-fetch` | 取消当前获取 |
+| `GET/PUT/DELETE /api/language-rules` | 语言列表、保存单语言、按 ?id 恢复/删除 |
 
 `from/to` 包含端点；无时区时间按扫描主机本地时区理解，跨机器集成建议传带时区 RFC3339。`source` 为零基文件索引，缺省或 -1 代表全部。keyword 忽略大小写并匹配完整事件；regex 匹配逐物理行，使用 Go RE2 语法。
 
 HTTP 非成功响应为 `{error: "..."}`。分析失败保留上一次成功报告，调用方必须检查 status.error 并确认本次任务完成，不能把旧报告误认成新分析结果。单实例同一时间只接受一个分析任务。
+
+SFTP POST 示例：`{"host":"192.168.1.20","port":22,"user":"logreader","password":"...","fingerprint":"SHA256:...","path":"/var/log/myapp","pattern":"*.log,*.txt","recursive":false,"max_files":1000,"max_bytes":10737418240}`。私钥用 private_key/passphrase；也可指定工具所在机器的 known_hosts 文件路径。不会保存凭据，不支持不验证主机密钥。
+
+轮询时匹配任务 id，等待 busy=false，检查 error；仅成功后的 downloads[].id 可用于 analyze 的 uploads。失败/取消不返回不完整副本。HTTP 接口不会自动分析，GUI 的“获取后分析”由客户端发起下一次 analyze 请求。
+
+报告 sources[].remote 与详情 remote 可追溯服务器、端口、远程路径、获取时间和原始修改时间。changed=true 表示获取期间文件变化，不能把它当成强一致快照。CLI 可直接 fetch --analyze 输出同样的报告给 agent。详见 [SFTP 说明](sftp-usage.md)。
 
 ## 推荐分析顺序
 
