@@ -1,0 +1,21 @@
+2026-10-14 12:29:00.000 INFO  412 --- [main] com.demo.Application : Started Application in 2.1 seconds
+2026-10-14 12:30:00.123 ERROR 412 --- [http-nio-8080-exec-1] com.demo.OrderService : Failed to load order 1001
+java.lang.RuntimeException: Database operation failed
+    at com.demo.OrderService.load(OrderService.java:42)
+Caused by: java.sql.SQLTransientConnectionException: Connection is not available, request timed out after 30000ms
+    at com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:196)
+Caused by: java.net.ConnectException: Connection refused
+    at java.base/sun.nio.ch.Net.connect0(Native Method)
+2026-10-14 12:30:01.456 WARN  412 --- [http-nio-8080-exec-2] com.demo.OrderService : Slow request order=1002 latency=1200ms
+2026-10-14 12:31:02.789 ERROR 412 --- [http-nio-8080-exec-3] com.demo.OrderService : Failed to load order 1003
+java.lang.RuntimeException: Database operation failed
+    at com.demo.OrderService.load(OrderService.java:42)
+Caused by: java.sql.SQLTransientConnectionException: Connection is not available, request timed out after 30000ms
+    at com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:196)
+Caused by: java.net.ConnectException: Connection refused
+    at java.base/sun.nio.ch.Net.connect0(Native Method)
+2026-10-14 12:32:00.000 ERROR 412 --- [scheduler] com.demo.CacheService : Failed to refresh cache
+java.lang.NullPointerException: Cannot invoke getName because customer is null
+    at com.demo.CacheService.refresh(CacheService.java:81)
+2026-10-14 12:32:10.000 WARN  412 --- [http-nio-8080-exec-4] com.demo.OrderService : Slow request order=1004 latency=1600ms
+2026-10-14 12:33:00.000 INFO  412 --- [main] com.demo.Application : Health check succeeded

@@ -1,0 +1,15 @@
+{
+  "arch": "amd64",
+  "bytes": 10737418240,
+  "categories": 2,
+  "dense": false,
+  "elapsed_ms": 23197,
+  "events": 7699835,
+  "file": "E:\\linshi\\log-reviewer-bench-20261014\\bench-10gib.log",
+  "go": "go1.25.3",
+  "heap_mib": 3.1788177490234375,
+  "mib_per_second": 440.5726161875285,
+  "os": "windows",
+  "runtime_sys_mib": 11.64453125,
+  "wall_ms": 23242
+}

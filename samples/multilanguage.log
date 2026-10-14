@@ -1,0 +1,16 @@
+2026-10-14 12:30:00,100 ERROR payment.worker - Payment task 1001 failed
+Traceback (most recent call last):
+  File "worker.py", line 42, in charge
+    response = client.post(url)
+TimeoutError: Payment gateway timed out
+2026-10-14 12:31:00,100 WARNING payment.worker - Retry attempt 2
+{"level":50,"time":1791952200123,"name":"node-api","msg":"upstream request failed","err":{"type":"Error","message":"socket hang up","stack":"Error: socket hang up\n    at request (api.js:42:11)"}}
+{"level":50,"time":1791952260123,"name":"node-api","msg":"upstream request failed","err":{"type":"Error","message":"socket hang up","stack":"Error: socket hang up\n    at request (api.js:42:11)"}}
+{"@t":"2026-10-14T12:33:00+08:00","@l":"Error","@mt":"Failed to read configuration","SourceContext":"ConfigService","@x":"System.IO.FileNotFoundException: settings.json missing\n   at ConfigService.Read()"}
+2026-10-14T12:34:00+08:00 ERROR worker: connection failed
+panic: runtime error: invalid memory address or nil pointer dereference
+goroutine 1 [running]:
+main.main()
+    /app/main.go:19 +0x13
+2026-10-14T12:35:00+08:00 WARN api: retry backoff exceeded
+2026/10/14 12:36:00 [error] 123#0: connect() failed (111: Connection refused) while connecting to upstream

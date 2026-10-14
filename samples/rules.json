@@ -1,0 +1,7 @@
+[
+  {
+    "name": "pipe-format",
+    "pattern": "^(?P<time>[^|]+)\\|(?P<level>ERROR|WARN|INFO|DEBUG|FATAL)\\|(?P<logger>[^|]+)\\|(?P<message>.*)$",
+    "time_layout": "2006/01/02 15:04:05"
+  }
+]

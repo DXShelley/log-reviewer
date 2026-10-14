@@ -1,0 +1,10 @@
+/* Keep scrollable grid children inside the workspace at every content length. */
+.workspace{grid-template-rows:minmax(0,1fr);height:calc(100vh - 420px);min-height:420px}
+.category-pane,.detail-pane,.table-wrap,#detail{min-height:0}
+.log-text{font-size:12px}
+.pane-toolbar select{max-width:110px;font-size:11px}
+.copy-body{padding:0 18px 12px}
+.copy-body p{color:#a87718;font-size:12px}
+.copy-body textarea{font-family:Consolas,Menlo,monospace}
+@media(max-width:1050px){.workspace{height:auto;min-height:0;grid-template-rows:auto auto}.category-pane{min-height:330px;max-height:500px}.detail-pane{min-height:300px;max-height:750px}}
+@media(max-width:600px){.category-pane>.pane-toolbar{height:auto;min-height:51px;flex-wrap:wrap;padding:8px}.pane-toolbar select{max-width:100px}.category-pane>.pane-toolbar>span{margin-left:auto}}
