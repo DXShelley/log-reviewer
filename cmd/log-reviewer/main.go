@@ -6,18 +6,20 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"log-reviewer/internal/logs"
 	"log-reviewer/internal/server"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -55,10 +57,11 @@ func run(args []string) error {
 	}
 }
 
-const help = `Log Reviewer 0.3.0 - local, streaming log classification
+const help = `Log Reviewer 0.4.0 - local, streaming log classification
 
   log-reviewer                              Open local GUI
-  log-reviewer gui [--port 8765] [--no-browser] [files...]
+  log-reviewer gui [--host 0.0.0.0] [--port 8765] [--no-browser] [files...]
+    [--allowed-hosts logs.example.com] [--cache-dir directory] [--rule-dir directory]
   log-reviewer analyze [--out report.json] [--all] [--rules rules.json] files...
   log-reviewer languages                     Export built-in language rules as JSON
   log-reviewer analyze --language-rules languages.json [files...]
@@ -214,14 +217,20 @@ func gui(args []string) error {
 		return err
 	}
 	f := flag.NewFlagSet("gui", flag.ContinueOnError)
-	port := f.Int("port", 8765, "loopback port; 0 chooses a free port")
+	host := f.String("host", "0.0.0.0", "listen address; default enables all IPv4 and available IPv6 interfaces")
+	port := f.Int("port", 8765, "listen port; 0 chooses a free port")
+	allowedHosts := f.String("allowed-hosts", "", "comma-separated additional HTTP hostnames for DNS or reverse proxy access")
+	cacheDir := f.String("cache-dir", "", "parent directory for temporary session files")
 	noBrowser := f.Bool("no-browser", false, "do not open browser")
 	keep := f.Bool("keep-cache", false, "keep session index after exit")
 	ruleDir := f.String("rule-dir", defaultRules, "persistent per-language rule directory")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
-	dir, err := os.MkdirTemp("", "log-reviewer-")
+	if *port < 0 || *port > 65535 {
+		return errors.New("port must be between 0 and 65535")
+	}
+	dir, err := os.MkdirTemp(*cacheDir, "log-reviewer-")
 	if err != nil {
 		return err
 	}
@@ -233,15 +242,42 @@ func gui(args []string) error {
 		return err
 	}
 	defer s.Close()
-	l, srv, err := server.Serve(s, *port)
-	if err != nil && *port == 8765 {
-		l, srv, err = server.Serve(s, 0)
+	var hosts []string
+	for _, value := range strings.Split(*allowedHosts, ",") {
+		if value = strings.TrimSpace(value); value != "" {
+			hosts = append(hosts, value)
+		}
+	}
+	l, srv, err := server.ServeHost(s, *host, *port, hosts)
+	if err != nil && *port != 0 {
+		fmt.Fprintf(os.Stderr, "Cannot listen on %s:%d (%v); trying an automatically assigned port.\n", *host, *port, err)
+		l, srv, err = server.ServeHost(s, *host, 0, hosts)
 	}
 	if err != nil {
 		return err
 	}
-	url := "http://" + l.Addr().String() + "/#" + s.Token()
+	listenHost, listenPort, _ := net.SplitHostPort(l.Addr().String())
+	defer l.Close()
+	var ipv6 net.Listener
+	if *host == "0.0.0.0" {
+		ipv6, err = net.Listen("tcp6", net.JoinHostPort("::", listenPort))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "IPv6 unavailable on port %s: %v\n", listenPort, err)
+		} else {
+			defer ipv6.Close()
+		}
+	}
+	browserHost := listenHost
+	if ip := net.ParseIP(listenHost); ip != nil && ip.IsUnspecified() {
+		browserHost = "127.0.0.1"
+		if *host == "::" {
+			browserHost = "::1"
+		}
+	}
+	url := "http://" + net.JoinHostPort(browserHost, listenPort) + "/#" + s.Token()
 	fmt.Printf("Log Reviewer %s\nGUI: %s\nAPI token: %s\nCache: %s\nPress Ctrl+C to exit.\n", version, url, s.Token(), dir)
+	fmt.Printf("Listen: %s\n", l.Addr())
+	printAccessAddresses(listenHost, listenPort, s.Token(), ipv6 != nil)
 	if len(f.Args()) > 0 {
 		if err = s.Start(f.Args(), false, nil); err != nil {
 			return err
@@ -251,10 +287,13 @@ func gui(args []string) error {
 		openBrowser(url)
 	}
 	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, os.Interrupt)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(ch)
-	done := make(chan error, 1)
+	done := make(chan error, 2)
 	go func() { done <- srv.Serve(l) }()
+	if ipv6 != nil {
+		go func() { done <- srv.Serve(ipv6) }()
+	}
 	select {
 	case err := <-done:
 		return err
@@ -262,6 +301,54 @@ func gui(args []string) error {
 		l.Close()
 		return nil
 	}
+}
+
+func accessURL(host, port, token string) string {
+	return "http://" + strings.ReplaceAll(net.JoinHostPort(host, port), "%", "%25") + "/#" + token
+}
+
+func printAccessAddresses(host, port, token string, extraIPv6 bool) {
+	bound := net.ParseIP(host)
+	if bound == nil || !bound.IsUnspecified() {
+		fmt.Printf("Access: %s\n", accessURL(host, port, token))
+		return
+	}
+	if bound.To4() != nil {
+		fmt.Printf("Internal IPv4: %s\n", accessURL("127.0.0.1", port, token))
+	}
+	if extraIPv6 || bound.To4() == nil {
+		fmt.Printf("Internal IPv6: %s\n", accessURL("::1", port, token))
+	}
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Cannot enumerate network interfaces: %v\n", err)
+		return
+	}
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addresses, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, address := range addresses {
+			ip, _, err := net.ParseCIDR(address.String())
+			if err != nil || ip.IsLoopback() || ip.IsUnspecified() {
+				continue
+			}
+			if ip.To4() != nil && bound.To4() != nil {
+				fmt.Printf("External IPv4 (%s): %s\n", iface.Name, accessURL(ip.String(), port, token))
+			} else if ip.To4() == nil && (extraIPv6 || bound.To4() == nil) {
+				host := ip.String()
+				if ip.IsLinkLocalUnicast() {
+					host += "%" + iface.Name
+				}
+				fmt.Printf("External IPv6 (%s): %s\n", iface.Name, accessURL(host, port, token))
+			}
+		}
+	}
+	fmt.Println("External addresses are local interfaces; public NAT addresses and firewall reachability cannot be inferred.")
 }
 func openBrowser(url string) {
 	var cmd *exec.Cmd

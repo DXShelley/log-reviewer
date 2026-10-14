@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"net"
@@ -37,6 +36,7 @@ type Server struct {
 	err              string
 	dir, token, addr string
 	uploads          map[string]string
+	allowedHosts     []string
 }
 
 func New(dir string) *Server {
@@ -66,14 +66,16 @@ func (s *Server) Handler(addr string) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'")
-		host, _, err := net.SplitHostPort(r.Host)
-		if err != nil || host != "127.0.0.1" {
+		if !s.validHost(r.Host, addr) {
 			fail(w, 403, errors.New("invalid host"))
 			return
 		}
-		if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+addr {
-			fail(w, 403, errors.New("invalid origin"))
-			return
+		if origin := r.Header.Get("Origin"); origin != "" {
+			u, err := url.Parse(origin)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host != r.Host || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+				fail(w, 403, errors.New("invalid origin"))
+				return
+			}
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -86,8 +88,51 @@ func (s *Server) Handler(addr string) http.Handler {
 		m.ServeHTTP(w, r)
 	})
 }
+func (s *Server) validHost(authority, addr string) bool {
+	host := authority
+	if h, _, err := net.SplitHostPort(authority); err == nil {
+		host = h
+	} else if strings.Contains(authority, ":") {
+		return false
+	}
+	bound, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	for _, allowed := range s.allowedHosts {
+		if strings.EqualFold(host, allowed) {
+			return true
+		}
+	}
+	ipHost, _, _ := strings.Cut(host, "%")
+	ip, listenIP := net.ParseIP(ipHost), net.ParseIP(bound)
+	if listenIP == nil {
+		return strings.EqualFold(host, bound)
+	}
+	if listenIP.IsUnspecified() {
+		return ip != nil && !ip.IsUnspecified() || strings.EqualFold(host, "localhost")
+	}
+	return ip != nil && ip.Equal(listenIP) || listenIP.IsLoopback() && strings.EqualFold(host, "localhost")
+}
+
 func Serve(s *Server, port int) (net.Listener, *http.Server, error) {
-	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	return ServeHost(s, "127.0.0.1", port, nil)
+}
+
+func ServeHost(s *Server, host string, port int, allowedHosts []string) (net.Listener, *http.Server, error) {
+	if host == "" || port < 0 || port > 65535 {
+		return nil, nil, errors.New("invalid host or port")
+	}
+	s.allowedHosts = allowedHosts
+	network := "tcp"
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.To4() != nil {
+			network = "tcp4"
+		} else {
+			network = "tcp6"
+		}
+	}
+	l, err := net.Listen(network, net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return nil, nil, err
 	}
