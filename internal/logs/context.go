@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"io"
-	"os"
+
 	"regexp"
 	"strings"
 )
 
-func findContextAnchor(f *os.File, rec Record, keyword string, re *regexp.Regexp) (int64, int64, uint64, string, bool, bool, error) {
+func findContextAnchor(f ReadFile, rec Record, keyword string, re *regexp.Regexp) (int64, int64, uint64, string, bool, bool, error) {
 	reader := bufio.NewReaderSize(io.NewSectionReader(f, int64(rec.Offset), int64(rec.Length)), 64*1024)
 	position, start, line := int64(rec.Offset), int64(rec.Offset), rec.Line
 	needle := strings.ToLower(keyword)
@@ -60,7 +60,7 @@ func findContextAnchor(f *os.File, rec Record, keyword string, re *regexp.Regexp
 }
 
 // Grow reads by blocks; both directions have a bounded preview budget.
-func readContext(f *os.File, offset int64, count int, before bool) (string, bool, error) {
+func readContext(f ReadFile, offset int64, count int, before bool) (string, bool, error) {
 	if count == 0 {
 		return "", false, nil
 	}

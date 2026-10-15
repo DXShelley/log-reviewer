@@ -31,7 +31,7 @@ type query struct {
 	from, to int64
 	re       *regexp.Regexp
 	groups   map[uint32]*Group
-	files    map[uint32]*os.File
+	files    map[uint32]ReadFile
 	scratch  []byte
 }
 
@@ -73,7 +73,7 @@ func ParseUpperBound(s string) (int64, error) {
 	return n, nil
 }
 func newQuery(report *Report, f Filter) (*query, error) {
-	q := &query{Filter: f, groups: map[uint32]*Group{}, files: map[uint32]*os.File{}, scratch: make([]byte, 64*1024)}
+	q := &query{Filter: f, groups: map[uint32]*Group{}, files: map[uint32]ReadFile{}, scratch: make([]byte, 64*1024)}
 	var err error
 	q.from, err = ParseBound(f.From)
 	if err != nil {
@@ -105,12 +105,12 @@ func (q *query) close() {
 		f.Close()
 	}
 }
-func validatedFile(r *Report, si uint32) (*os.File, error) {
+func validatedFile(r *Report, si uint32) (ReadFile, error) {
 	if int(si) >= len(r.Sources) {
 		return nil, errors.New("invalid source index")
 	}
 	s := r.Sources[si]
-	f, err := os.Open(s.Path)
+	f, err := openRead(s.Path, r.Readers)
 	if err != nil {
 		return nil, err
 	}
@@ -321,6 +321,10 @@ func Summarize(r *Report, f Filter) ([]*Group, error) {
 }
 
 type Detail struct {
+	EventID          string        `json:"event_id"`
+	EndLine          uint64        `json:"end_line"`
+	EndTime          string        `json:"end_time"`
+	EndOffset        uint64        `json:"end_offset"`
 	ContextMode      string        `json:"context_mode,omitempty"`
 	ContextReason    string        `json:"context_reason,omitempty"`
 	ContextBefore    int           `json:"context_before"`
@@ -360,12 +364,18 @@ func ReadDetail(r *Report, rec Record, g *Group, options ...ContextOptions) (Det
 		return Detail{}, errors.New("context lines must be between 0 and 10000")
 	}
 	d := Detail{GroupID: g.ID, Source: r.Sources[rec.Source].Path, Remote: r.Sources[rec.Source].Remote, Offset: rec.Offset, Length: rec.Length, Line: rec.Line, Time: stamp(rec.Time)}
+	d.EventID = fmt.Sprintf("S%d@%d+%d", rec.Source+1, rec.Offset, rec.Length)
+	d.EndOffset = rec.Offset + rec.Length
+	f, err := validatedFile(r, rec.Source)
+	if err != nil {
+		return d, err
+	}
+	defer f.Close()
+	d.EndLine, d.EndTime, err = eventRange(f, rec)
+	if err != nil {
+		return d, err
+	}
 	if context.Summary {
-		f, err := validatedFile(r, rec.Source)
-		if err != nil {
-			return d, err
-		}
-		defer f.Close()
 		n := rec.Length
 		if n > 4096 {
 			n = 4096
@@ -377,11 +387,6 @@ func ReadDetail(r *Report, rec Record, g *Group, options ...ContextOptions) (Det
 		d.Key = eventKey.FindString(string(b))
 		return d, nil
 	}
-	f, err := validatedFile(r, rec.Source)
-	if err != nil {
-		return d, err
-	}
-	defer f.Close()
 	n := rec.Length
 	if n > 2*1024*1024 {
 		n = 2 * 1024 * 1024
@@ -432,6 +437,42 @@ func ReadDetail(r *Report, rec Record, g *Group, options ...ContextOptions) (Det
 	return d, nil
 }
 
+// Derive exact bounds from the indexed byte span, including old report indexes.
+func eventRange(f ReadFile, rec Record) (uint64, string, error) {
+	reader := bufio.NewReaderSize(io.NewSectionReader(f, int64(rec.Offset), int64(rec.Length)), 64*1024)
+	line, last := rec.Line, rec.Time
+	parser := &Parser{}
+	var prefix []byte
+	for {
+		part, err := reader.ReadSlice('\n')
+		if len(prefix) < 4096 {
+			n := min(len(part), 4096-len(prefix))
+			prefix = append(prefix, part[:n]...)
+		}
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		if err != nil && err != io.EOF {
+			return 0, "", err
+		}
+		if len(prefix) > 0 {
+			if h, ok := parser.Parse(prefix, true); ok && h.HasTime {
+				last = h.Time
+			} else if n, ok := parser.parseTime(strings.TrimSpace(string(prefix)), ""); ok {
+				last = n
+			}
+			line++
+			prefix = prefix[:0]
+		}
+		if err == io.EOF {
+			if line > rec.Line {
+				line--
+			}
+			return line, stamp(last), nil
+		}
+	}
+}
+
 var stopWalk = errors.New("stop walk")
 
 func Details(r *Report, f Filter, offset, limit int, options ...ContextOptions) ([]Detail, bool, error) {
@@ -471,7 +512,7 @@ func Details(r *Report, f Filter, offset, limit int, options ...ContextOptions) 
 	return out, more, err
 }
 func Export(r *Report, f Filter, w io.Writer) error {
-	files := map[uint32]*os.File{}
+	files := map[uint32]ReadFile{}
 	defer func() {
 		for _, f := range files {
 			f.Close()

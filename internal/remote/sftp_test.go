@@ -2,6 +2,7 @@ package remote
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -13,6 +14,28 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 	"log-reviewer/internal/testsupport/sftpfixture"
 )
+
+type deniedFS struct {
+	remoteFS
+	err error
+}
+
+func (f deniedFS) Lstat(string) (os.FileInfo, error) { return nil, f.err }
+
+func TestRemotePathDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{os.ErrPermission, "权限不足"},
+		{os.ErrNotExist, "无法确认路径不存在"},
+	} {
+		_, err := collectFiles(context.Background(), deniedFS{err: tc.err}, Options{Path: "/home/dxshelley/docker", Pattern: "*.log"}, nil)
+		if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "读取路径属性") || !strings.Contains(err.Error(), "/home/dxshelley/docker") || !errors.Is(err, tc.err) {
+			t.Fatalf("missing diagnostic or original cause: %v", err)
+		}
+	}
+}
 
 func TestSFTPDownloadAndTrust(t *testing.T) {
 	root := t.TempDir()
@@ -50,6 +73,13 @@ func TestSFTPDownloadAndTrust(t *testing.T) {
 		t.Fatalf("%+v %v", manifest, err)
 	}
 	options.Path = "logs/a.log"
+	options.Path = "logs\nlogs/nested\nlogs/a.log\n"
+	options.MaxFiles = 2
+	manifest, err = Download(context.Background(), options, t.TempDir(), nil)
+	if err != nil || len(manifest.Files) != 2 {
+		t.Fatalf("multiple overlapping paths must yield two unique files: %+v %v", manifest, err)
+	}
+	options.Path = "logs/a.log"
 	options.Password = ""
 	options.PrivateKey = server.PrivateKey
 	if _, err = Download(context.Background(), options, t.TempDir(), nil); err != nil {
@@ -73,6 +103,18 @@ func TestSFTPDownloadAndTrust(t *testing.T) {
 		t.Fatal("ssh directory", err)
 	}
 	options.Fingerprint = "SHA256:wrong"
+	emptyKnown := filepath.Join(t.TempDir(), "known_hosts")
+	unknown := options
+	unknown.Fingerprint = ""
+	unknown.KnownHosts = emptyKnown
+	for _, missing := range []bool{true, false} {
+		if !missing {
+			os.WriteFile(emptyKnown, nil, 0600)
+		}
+		if _, err = Download(context.Background(), unknown, t.TempDir(), nil); err == nil || !strings.Contains(err.Error(), server.Fingerprint) || !strings.Contains(err.Error(), "尚未受信任") {
+			t.Fatalf("unknown host must report fingerprint without accepting it: %v", err)
+		}
+	}
 	options.KnownHosts = ""
 	if _, err = Download(context.Background(), options, t.TempDir(), nil); err == nil {
 		t.Fatal("wrong fingerprint accepted")
@@ -175,8 +217,18 @@ func TestSnapshotChangeCancelAndCleanup(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	options := Options{Host: "localhost", User: "tester", Password: "secret", Path: "logs", SSHDir: t.TempDir()}
-	if options.Validate() == nil {
-		t.Fatal("unverified host accepted")
+	if err := options.Validate(); err != nil {
+		t.Fatalf("missing known_hosts should allow fingerprint discovery during handshake: %v", err)
+	}
+	if options.MaxFiles != 50 {
+		t.Fatalf("default file limit: %d", options.MaxFiles)
+	}
+	for _, invalid := range []string{" \n\t", "logs\x00outside", strings.Repeat("x", 65537), strings.Repeat("logs\n", 101)} {
+		candidate := options
+		candidate.Path = invalid
+		if candidate.Validate() == nil {
+			t.Fatal("invalid remote paths accepted")
+		}
 	}
 	options.Fingerprint = "SHA256:expected"
 	options.Pattern = "["
@@ -190,6 +242,65 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+func TestFilenameMatchers(t *testing.T) {
+	for _, tc := range []struct {
+		rules, name string
+		want        bool
+	}{
+		{"*.log\n*.txt", "app.log", true},
+		{"*.log\r\n\n*.txt", "notes.txt", true},
+		{"*.log,*.txt", "app.csv", false},
+		{"regex:^app-\\d{4}-\\d{2}-\\d{2}\\.log$", "app-2026-10-15.log", true},
+		{"regex:^app-\\d{4}-\\d{2}-\\d{2}\\.log$", "prefix-app-2026-10-15.log", false},
+		{"regex:(?i)\\.(log|txt)$", "APP.LOG", true},
+		{"regex:^a{1,3}\\.log$", "aaa.log", true},
+		{"*.txt\nregex:^app\\.log$", "app.log", true},
+	} {
+		matchers, err := filenameMatchers(tc.rules)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := false
+		for _, match := range matchers {
+			got = got || match(tc.name)
+		}
+		if got != tc.want {
+			t.Errorf("%q / %q: got %v", tc.rules, tc.name, got)
+		}
+	}
+	for _, rules := range []string{"regex:[", "regex:", "[", ",,\n"} {
+		if _, err := filenameMatchers(rules); err == nil {
+			t.Errorf("invalid rules accepted: %q", rules)
+		}
+	}
+}
+
+func TestExcludeDirectories(t *testing.T) {
+	root := t.TempDir()
+	for _, file := range []string{"app.log", "backup/old.log", "live/worker.log", "live/cache-1/skip.log", "live/backup/skip.log"} {
+		full := filepath.Join(root, filepath.FromSlash(file))
+		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("ERROR example\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	options := Options{Path: ".", Pattern: "*.log\nexclude-dir:backup\nexclude-dir:cache*", Recursive: true, MaxFiles: 2, MaxBytes: 1000}
+	manifest, err := downloadFiles(context.Background(), localFS{root: root}, options, t.TempDir(), func(Progress) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Files) != 2 || manifest.Files[0].RemotePath != "app.log" || manifest.Files[1].RemotePath != "live/worker.log" {
+		t.Fatalf("unexpected files: %+v", manifest.Files)
+	}
+	for _, rule := range []string{"exclude-dir:", "exclude-dir:[", "exclude-dir:parent/child"} {
+		if _, err := excludedDirectoryMatchers(rule); err == nil {
+			t.Errorf("invalid directory rule accepted: %q", rule)
+		}
+	}
+}
+
 type linkInfo struct{ os.FileInfo }
 
 func (linkInfo) Name() string      { return "link.log" }
@@ -198,11 +309,27 @@ func (linkInfo) Mode() os.FileMode { return os.ModeSymlink | 0600 }
 type linkFS struct{ localFS }
 
 func (f linkFS) Lstat(p string) (os.FileInfo, error) {
+	if p == "." {
+		info, err := f.localFS.Lstat(p)
+		return linkInfo{info}, err
+	}
 	if p == "link.log" {
 		info, err := f.localFS.Lstat("app.log")
 		return linkInfo{info}, err
 	}
 	return f.localFS.Lstat(p)
+}
+func (f linkFS) Stat(p string) (os.FileInfo, error) {
+	if p == "link.log" {
+		p = "app.log"
+	}
+	return f.localFS.Stat(p)
+}
+func (f linkFS) Open(p string) (io.ReadCloser, error) {
+	if p == "link.log" {
+		p = "app.log"
+	}
+	return f.localFS.Open(p)
 }
 func (f linkFS) ReadDir(p string) ([]os.FileInfo, error) {
 	items, err := f.localFS.ReadDir(p)
@@ -221,8 +348,8 @@ func TestSymlinkAndDepthBound(t *testing.T) {
 		t.Fatalf("%+v %v", manifest, err)
 	}
 	options.Path = "link.log"
-	if _, err := downloadFiles(context.Background(), linkFS{localFS{root: root}}, options, t.TempDir(), func(Progress) {}); err == nil {
-		t.Fatal("selected symlink accepted")
+	if manifest, err := downloadFiles(context.Background(), linkFS{localFS{root: root}}, options, t.TempDir(), func(Progress) {}); err != nil || len(manifest.Files) != 1 || manifest.Files[0].RemotePath != "link.log" {
+		t.Fatalf("explicit symlink must resolve: %+v %v", manifest, err)
 	}
 	nested := root
 	for i := 0; i < 33; i++ {

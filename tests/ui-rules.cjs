@@ -4,7 +4,7 @@ const fs=require('fs'),os=require('os'),path=require('path'),assert=require('ass
 async function main(){
  const root=path.resolve(__dirname,'..'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'log-reviewer-ui-rules-'));
  let child,browser,context;
- async function start(){child=spawn(path.join(root,'dist/log-reviewer-windows-amd64.exe'),['gui','--no-browser','--port','0','--rule-dir',dir],{windowsHide:true});return await new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('startup timeout')),10000);child.on('error',reject);child.stdout.on('data',b=>{output+=b;const m=output.match(/GUI: (http:\/\/\S+)/);if(m){clearTimeout(timer);resolve(m[1])}})})}
+ async function start(){child=spawn(process.env.LR_TEST_BINARY||path.join(root,'dist/log-reviewer-windows-amd64.exe'),['gui','--no-browser','--port','0','--rule-dir',dir],{windowsHide:true});return await new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('startup timeout')),10000);child.on('error',reject);child.stdout.on('data',b=>{output+=b;const m=output.match(/HTTP: (http:\/\/\S+)/);if(m){clearTimeout(timer);resolve(m[1])}})})}
  try{
   let url=await start();browser=await chromium.connectOverCDP('http://127.0.0.1:9222',{timeout:5000});context=await browser.newContext({viewport:{width:1440,height:980}});const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(url);
   await page.locator('#rules-toggle').click();await page.waitForFunction(()=>document.querySelectorAll('#language-list button').length===17);

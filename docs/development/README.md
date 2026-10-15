@@ -2,7 +2,7 @@
 
 ## 分支与目录
 
-`dev` 是完整源码分支，也是贡献 PR 的目标；GitHub 默认分支 `main` 提供交付文件。查看代码请切换至 [dev](https://github.com/DXShelley/log-reviewer/tree/dev)。保留此约定，避免把开发缓存和测试资源带入交付面。
+`dev` 是完整源码分支，也是贡献 PR 的目标；GitHub 默认分支 `main` 提供介绍、使用文档和维护入口。查看代码请切换至 [dev](https://github.com/DXShelley/log-reviewer/tree/dev)。所有分支均禁止提交 `dist/`、可执行文件、依赖安装目录、缓存和测试报告，二进制仅作为 GitHub Release assets 发布。
 
 | 目录 | 用途 |
 | --- | --- |
@@ -37,12 +37,14 @@ GUI 通过 Go embed 打包，修改前端后必须重新构建并重启程序。
 
 ## 浏览器回归
 
+只读源文件、路径格式、本机导入、远程直读和网络异常缓存的用例矩阵、运行命令及人工验收见 [只读读取与路径兼容测试](../readonly-testing.md)。浏览器测试可用 `LR_TEST_BINARY` 指定临时构建的程序，避免依赖过期的 `dist/` 产物。
+
 已有测试通过 Playwright 连接本机 Chrome `127.0.0.1:9222`，使用独立浏览器 Profile。设置 `NODE_PATH` 指向安装的 Playwright 后执行 `node tests/ui-design.cjs`、`node tests/ui-workspace.cjs`、`node tests/gui-smoke.cjs`。更多入口见 [项目状态](../PROJECT_STATUS.md)。浏览器测试目前属于本地验证，不宣称已在 GitHub CI 中运行。
 
 ## 自动化与发布
 
 - 开发 CI 在 `dev` 的 push/PR 上运行 Linux、Windows、macOS 的 Go 测试、vet 和格式检查，并检查模块完整性。
-- 交付 CI 在 `main` 上验证六个平台文件、SHA256、体积和文档链接。
+- 交付 CI 在 `main` 上检查未跟踪构建产物，并验证文档链接。
 - 发布通过 GitHub Release 附加六个平台二进制、SHA256 和第三方许可；已有标签不覆盖。
 - Dependabot 针对 `dev` 更新 Go 模块、针对相关分支更新 GitHub Actions。
 

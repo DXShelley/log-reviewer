@@ -5,7 +5,7 @@ const fs=require('fs');const path=require('path');const assert=require('assert')
 async function main(){
  const root=path.resolve(__dirname,'..');const bin=process.env.LR_BINARY||path.join(root,'dist','log-reviewer-windows-amd64.exe');
  const child=spawn(bin,['gui','--no-browser','--port','0','samples/springboot.log','samples/multilanguage.log'],{cwd:root,windowsHide:true});let output='';
- const url=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('server startup timeout')),15000);child.stdout.on('data',b=>{output+=b.toString();const m=output.match(/GUI: (http:\/\/\S+)/);if(m){clearTimeout(timer);resolve(m[1])}});child.on('error',reject);child.on('exit',code=>{if(code)reject(Error('server exited '+code))})});
+ const url=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('server startup timeout')),15000);child.stdout.on('data',b=>{output+=b.toString();const m=output.match(/HTTP: (http:\/\/\S+)/);if(m){clearTimeout(timer);resolve(m[1])}});child.on('error',reject);child.on('exit',code=>{if(code)reject(Error('server exited '+code))})});
  let browser,context;const consoleErrors=[];try{
  browser=await chromium.connectOverCDP('http://127.0.0.1:9222',{timeout:5000});context=await browser.newContext({viewport:{width:1440,height:980},permissions:['clipboard-read','clipboard-write'],acceptDownloads:true});
  await context.addInitScript(()=>{window.showSaveFilePicker=undefined;const write=navigator.clipboard.writeText.bind(navigator.clipboard);navigator.clipboard.writeText=async text=>{window.__copied=text;await write(text)}});const page=await context.newPage();page.on('pageerror',e=>consoleErrors.push(e.message));

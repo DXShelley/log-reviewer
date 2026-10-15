@@ -9,7 +9,7 @@ async function main(){
  let output='',stderr='',browser,context;
  child.stderr.on('data',b=>stderr+=b);
  try {
-  const url=await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Error('startup timeout')),10000);child.on('error',reject);child.stdout.on('data',b=>{output+=b;const m=output.match(/GUI: (http:\/\/\S+)/);if(m){clearTimeout(t);resolve(m[1])}})});
+  const url=await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Error('startup timeout')),10000);child.on('error',reject);child.stdout.on('data',b=>{output+=b;const m=output.match(/HTTP: (http:\/\/\S+)/);if(m){clearTimeout(t);resolve(m[1])}})});
   const parsed=new URL(url),token=parsed.hash.slice(1);assert(+parsed.port!==occupied);assert(stderr.includes('automatically assigned'));
   assert(await request(parsed.origin+'/api/status','')===401);
   assert(await request(parsed.origin+'/api/status',token,'http://evil.example')===403);

@@ -2,9 +2,9 @@ const {chromium}=require('playwright');
 const {spawn}=require('child_process');
 const fs=require('fs'),path=require('path'),assert=require('assert');
 async function main(){
- const root=path.resolve(__dirname,'..'),child=spawn(path.join(root,'dist/log-reviewer-windows-amd64.exe'),['gui','--no-browser','--port','0'],{cwd:root,windowsHide:true});let output='',browser,context;
+ const root=path.resolve(__dirname,'..'),child=spawn(process.env.LR_TEST_BINARY||path.join(root,'dist/log-reviewer-windows-amd64.exe'),['gui','--no-browser','--port','0'],{cwd:root,windowsHide:true});let output='',browser,context;
  try{
-  const url=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('startup timeout')),10000);child.stdout.on('data',b=>{output+=b;const m=output.match(/GUI: (http:\/\/\S+)/);if(m){clearTimeout(timer);resolve(m[1])}});child.on('error',reject)});
+  const url=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('startup timeout')),10000);child.stdout.on('data',b=>{output+=b;const m=output.match(/HTTP: (http:\/\/\S+)/);if(m){clearTimeout(timer);resolve(m[1])}});child.on('error',reject)});
   browser=await chromium.connectOverCDP('http://127.0.0.1:9222',{timeout:5000});context=await browser.newContext({viewport:{width:1440,height:1000},permissions:['clipboard-write']});
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await context.addInitScript(()=>{navigator.clipboard.writeText=async text=>{window.__copied=text}});await page.goto(url,{timeout:10000});
   assert(await page.locator('#context-auto').isChecked());assert(await page.locator('header #layout').count()===1);assert(await page.locator('.source-actions #upload-button').count()===1);assert(await page.locator('.analysis-actions #analyze').count()===1);
@@ -16,10 +16,10 @@ async function main(){
   await page.getByLabel('单条前文行数').fill('20');await page.getByLabel('单条后文行数').fill('100');await page.getByRole('button',{name:'查询',exact:true}).click();await page.locator('.context-mode.manual').waitFor();text=await page.locator('.log-text').innerText();assert(text.includes('old unrelated')&&text.includes('requestId=other'));
   await page.getByRole('button',{name:'复制日志内容',exact:true}).click();assert(await page.evaluate(()=>window.__copied.includes('<img src=x')));await page.getByRole('button',{name:'自动换行',exact:true}).click();assert(await page.locator('.log-text.wrap').count()===1);
   assert(await page.getByRole('button',{name:'使用总体',exact:true}).count()===0);assert(await page.locator('#apply-context').count()===0);
-  await page.locator('#reset-context').click();await page.locator('#occurrences>.occurrence>summary').click();await page.locator('.context-mode.auto').waitFor();assert(!(await page.locator('.log-text').innerText()).includes('old unrelated'));
-  assert(await page.evaluate(()=>document.querySelector('.time-export-actions').getBoundingClientRect().top>=document.querySelector('#search').getBoundingClientRect().bottom));
+  await page.getByRole('button',{name:'关闭日志内容',exact:true}).click();await page.locator('#reset-context').click();await page.locator('#occurrences>.occurrence>summary').click();await page.locator('.context-mode.auto').waitFor();assert(!(await page.locator('.log-text').innerText()).includes('old unrelated'));
+  assert(await page.locator('.header-right .time-export-actions').count()===1);await page.getByRole('button',{name:'关闭日志内容',exact:true}).click();
   await page.evaluate(()=>setBusy(true));await page.locator('#operation-mask').waitFor({state:'visible'});await page.evaluate(()=>setBusy(false));await page.locator('#operation-mask').waitFor({state:'hidden'});
-  const large=await page.evaluate(()=>{const raw='ERROR '+ 'x'.repeat(1024*1024)+'<script>window.__xss=1</script>';const pre=logPre(raw);const area=document.createElement('div');area.append(pre);return {same:pre.textContent===raw,scripts:pre.querySelectorAll('script').length,size:pre.textContent.length}});assert(large.same&&large.scripts===0&&large.size>1048576);
+  const large=await page.evaluate(()=>{const start=performance.now(),raw='ERROR '+ 'x'.repeat(1024*1024)+'<script>window.__xss=1</script>';const pre=logPre(raw);return {same:pre.textContent===raw,scripts:pre.querySelectorAll('script').length,size:pre.textContent.length,elapsed:performance.now()-start}});assert(large.same&&large.scripts===0&&large.size>1048576);assert(large.elapsed<1500,'long-line rendering took '+large.elapsed+' ms');
   assert(await page.evaluate(()=>{const pino=logPre('{"level":50,"msg":"java.lang.RuntimeException Main.java:42"}');return pino.querySelector('.hljs-severity-error')&&pino.querySelector('.hljs-exception')&&pino.querySelector('.hljs-location')}));
   fs.mkdirSync(path.join(root,'reports'),{recursive:true});await page.screenshot({path:path.join(root,'reports/design-desktop.png'),fullPage:true});
   await page.locator('#layout').selectOption('columns');await page.locator('#occurrences>.occurrence>summary').click();await page.locator('#event-viewer .log-text').waitFor();await page.screenshot({path:path.join(root,'reports/design-columns.png'),fullPage:true});

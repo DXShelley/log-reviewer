@@ -3,3 +3,15 @@
 *.idx
 *.test
 /reports/
+node_modules/
+*.exe
+*.dll
+*.so
+*.dylib
+*.zip
+*.tar.gz
+.DS_Store
+Thumbs.db
+log-reviewer-state.json
+/log-reviewer-tls.pem
+/log-reviewer-state.json

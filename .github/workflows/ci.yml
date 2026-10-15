@@ -25,6 +25,13 @@ jobs:
       - name: Format
         shell: bash
         run: test -z "$(gofmt -l cmd internal tests tools)"
+      - name: Reject generated artifacts
+        shell: bash
+        run: |
+          if git ls-files | grep -Ei '(^|/)(dist|node_modules|reports|\.work)/|\.(exe|dll|so|dylib|zip|tar\.gz)$'; then
+            echo 'Publish binaries as GitHub Release assets, never repository files.'
+            exit 1
+          fi
       - run: go mod verify
       - run: go test ./... -timeout 5m
       - run: go vet ./...

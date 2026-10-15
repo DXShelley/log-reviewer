@@ -70,6 +70,9 @@ const help = `Log Reviewer 0.7.1 - local, streaming log classification
   log-reviewer                              Open local GUI
   log-reviewer gui [--host 0.0.0.0] [--port 8765] [--no-browser] [files...]
     [--allowed-hosts logs.example.com] [--cache-dir directory] [--rule-dir directory]
+    [--allowed-client-ips IP,CIDR|off] [--state-file file]
+    [--https-port 8766] [--http=false] [--tls-cert cert.pem --tls-key key.pem]
+    [--tls-file log-reviewer-tls.pem]
   log-reviewer analyze [--out report.json] [--all] [--rules rules.json] files...
   log-reviewer languages                     Export built-in language rules as JSON
   log-reviewer fetch --host SERVER --user USER --path PATH --key PRIVATE_KEY
@@ -233,7 +236,18 @@ func gui(args []string) error {
 	f := flag.NewFlagSet("gui", flag.ContinueOnError)
 	host := f.String("host", "0.0.0.0", "listen address; default enables all IPv4 and available IPv6 interfaces")
 	port := f.Int("port", 8765, "listen port; 0 chooses a free port")
+	httpsPort := f.Int("https-port", 8766, "HTTPS listen port; 0 chooses a free port")
+	httpEnabled := f.Bool("http", true, "enable legacy HTTP access on --port")
+	tlsCert := f.String("tls-cert", "", "PEM certificate chain file (requires tls-key)")
+	tlsKey := f.String("tls-key", "", "PEM private key file (requires tls-cert)")
 	allowedHosts := f.String("allowed-hosts", "", "comma-separated additional HTTP hostnames for DNS or reverse proxy access")
+	allowedClients := f.String("allowed-client-ips", "", "persist comma-separated client IPs/CIDRs; use 'off' to disable")
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	stateFile := f.String("state-file", filepath.Join(filepath.Dir(executable), "log-reviewer-state.json"), "persistent access policy file")
+	tlsFile := f.String("tls-file", filepath.Join(filepath.Dir(executable), "log-reviewer-tls.pem"), "persistent self-signed certificate and private key bundle")
 	cacheDir := f.String("cache-dir", "", "parent directory for temporary session files")
 	noBrowser := f.Bool("no-browser", false, "do not open browser")
 	keep := f.Bool("keep-cache", false, "keep session index after exit")
@@ -241,7 +255,7 @@ func gui(args []string) error {
 	if err := f.Parse(args); err != nil {
 		return err
 	}
-	if *port < 0 || *port > 65535 {
+	if *port < 0 || *port > 65535 || *httpsPort < 0 || *httpsPort > 65535 {
 		return errors.New("port must be between 0 and 65535")
 	}
 	dir, err := os.MkdirTemp(*cacheDir, "log-reviewer-")
@@ -252,6 +266,19 @@ func gui(args []string) error {
 		defer os.RemoveAll(dir)
 	}
 	s := server.New(dir)
+	var clientOverride []string
+	f.Visit(func(value *flag.Flag) {
+		if value.Name == "allowed-client-ips" {
+			clientOverride = strings.Split(*allowedClients, ",")
+			if *allowedClients == "off" {
+				clientOverride = []string{}
+			}
+		}
+	})
+	if err := s.ConfigureAccess(*stateFile, clientOverride); err != nil {
+		return err
+	}
+	fmt.Printf("Access state: %s\n", *stateFile)
 	if err := s.UseRuleDirectory(*ruleDir); err != nil {
 		return err
 	}
@@ -262,25 +289,34 @@ func gui(args []string) error {
 			hosts = append(hosts, value)
 		}
 	}
-	l, srv, err := server.ServeHost(s, *host, *port, hosts)
-	if err != nil && *port != 0 {
-		fmt.Fprintf(os.Stderr, "Cannot listen on %s:%d (%v); trying an automatically assigned port.\n", *host, *port, err)
-		l, srv, err = server.ServeHost(s, *host, 0, hosts)
-	}
+	tlsConfig, err := server.TLSConfig(*tlsCert, *tlsKey, *tlsFile, append([]string{*host}, hosts...))
 	if err != nil {
 		return err
 	}
-	listenHost, listenPort, _ := net.SplitHostPort(l.Addr().String())
-	defer l.Close()
-	var ipv6 net.Listener
-	if *host == "0.0.0.0" {
-		ipv6, err = net.Listen("tcp6", net.JoinHostPort("::", listenPort))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "IPv6 unavailable on port %s: %v\n", listenPort, err)
-		} else {
-			defer ipv6.Close()
-		}
+	secure, err := listenGUI(s, *host, *httpsPort, hosts, tlsConfig)
+	if err != nil {
+		return err
 	}
+	defer func() {
+		for _, endpoint := range secure {
+			endpoint.listener.Close()
+			endpoint.server.Close()
+		}
+	}()
+	var plain []guiEndpoint
+	if *httpEnabled {
+		plain, err = listenGUI(s, *host, *port, hosts, nil)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			for _, endpoint := range plain {
+				endpoint.listener.Close()
+				endpoint.server.Close()
+			}
+		}()
+	}
+	listenHost, listenPort, _ := net.SplitHostPort(secure[0].listener.Addr().String())
 	browserHost := listenHost
 	if ip := net.ParseIP(listenHost); ip != nil && ip.IsUnspecified() {
 		browserHost = "127.0.0.1"
@@ -290,8 +326,15 @@ func gui(args []string) error {
 	}
 	url := accessURL(browserHost, listenPort, s.Token())
 	fmt.Printf("Log Reviewer %s\nGUI: %s\nAPI token: %s\nCache: %s\nPress Ctrl+C to exit.\n", version, url, s.Token(), dir)
-	fmt.Printf("Listen: %s\n", l.Addr())
-	printAccessAddresses(listenHost, listenPort, s.Token(), ipv6 != nil)
+	fmt.Printf("HTTPS Listen: %s\n", secure[0].listener.Addr())
+	printAccessAddresses(listenHost, listenPort, s.Token(), len(secure) > 1)
+	if *tlsCert == "" {
+		fmt.Printf("Self-signed TLS bundle: %s\nBrowser certificate trust is required; use --tls-cert and --tls-key for a trusted certificate.\n", *tlsFile)
+	}
+	if len(plain) > 0 {
+		_, httpPort, _ := net.SplitHostPort(plain[0].listener.Addr().String())
+		fmt.Printf("HTTP: %s\nHTTP Listen: %s\nHTTP is unencrypted; use --http=false to disable.\n", strings.Replace(accessURL(browserHost, httpPort, s.Token()), "https://", "http://", 1), plain[0].listener.Addr())
+	}
 	if len(f.Args()) > 0 {
 		if err = s.Start(f.Args(), false, nil); err != nil {
 			return err
@@ -303,22 +346,20 @@ func gui(args []string) error {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(ch)
-	done := make(chan error, 2)
-	go func() { done <- srv.Serve(l) }()
-	if ipv6 != nil {
-		go func() { done <- srv.Serve(ipv6) }()
+	done := make(chan error, len(secure)+len(plain))
+	for _, endpoint := range append(secure, plain...) {
+		go func(endpoint guiEndpoint) { done <- endpoint.server.Serve(endpoint.listener) }(endpoint)
 	}
 	select {
 	case err := <-done:
 		return err
 	case <-ch:
-		l.Close()
 		return nil
 	}
 }
 
 func accessURL(host, port, token string) string {
-	return "http://" + strings.ReplaceAll(net.JoinHostPort(host, port), "%", "%25") + "/#" + token
+	return "https://" + strings.ReplaceAll(net.JoinHostPort(host, port), "%", "%25") + "/#" + token
 }
 
 func printAccessAddresses(host, port, token string, extraIPv6 bool) {

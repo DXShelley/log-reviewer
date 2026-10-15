@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,8 +27,10 @@ import (
 var assets embed.FS
 
 type Server struct {
+	access           accessPolicy
 	rules            *logs.RuleStore
 	mu               sync.RWMutex
+	pickerMu         sync.Mutex
 	jobs             sync.WaitGroup
 	Report           *logs.Report
 	Progress         *logs.Progress
@@ -38,10 +39,15 @@ type Server struct {
 	err              string
 	dir, token, addr string
 	uploads          map[string]string
+	uploadDigests    map[string]string
 	allowedHosts     []string
 	remoteState      remoteState
 	remoteCancel     context.CancelFunc
+	remotePreview    *remotePreview
 	remoteSources    map[string]logs.RemoteSource
+	readers          map[string]logs.SourceOpener
+	sourceContext    context.Context
+	sourceCancel     context.CancelFunc
 }
 
 func New(dir string) *Server {
@@ -49,7 +55,8 @@ func New(dir string) *Server {
 	if _, err := rand.Read(b); err != nil {
 		panic(err)
 	}
-	return &Server{dir: dir, token: hex.EncodeToString(b), uploads: map[string]string{}, remoteSources: map[string]logs.RemoteSource{}, rules: &logs.RuleStore{Dir: filepath.Join(dir, "rules")}}
+	sourceContext, sourceCancel := context.WithCancel(context.Background())
+	return &Server{dir: dir, token: hex.EncodeToString(b), uploads: map[string]string{}, remoteSources: map[string]logs.RemoteSource{}, rules: &logs.RuleStore{Dir: filepath.Join(dir, "rules")}, sourceContext: sourceContext, sourceCancel: sourceCancel}
 }
 func (s *Server) Token() string { return s.token }
 func (s *Server) Handler(addr string) http.Handler {
@@ -58,19 +65,27 @@ func (s *Server) Handler(addr string) http.Handler {
 	sub, _ := fs.Sub(assets, "web")
 	m.Handle("/", http.FileServer(http.FS(sub)))
 	m.HandleFunc("/api/status", s.status)
+	m.HandleFunc("/api/pick-paths", s.pickPaths)
+	m.HandleFunc("/api/access-settings", s.accessSettings)
 	m.HandleFunc("/api/analyze", s.analyze)
 	m.HandleFunc("/api/cancel", s.cancel)
 	m.HandleFunc("/api/groups", s.groups)
 	m.HandleFunc("/api/details", s.details)
 	m.HandleFunc("/api/export", s.export)
 	m.HandleFunc("/api/report", s.report)
-	m.HandleFunc("/api/browse", s.browse)
 	m.HandleFunc("/api/upload", s.upload)
+	m.HandleFunc("/api/paths", s.localPaths)
+	m.HandleFunc("/api/upload-name", s.renameUpload)
 	m.HandleFunc("/api/language-rules", s.languageRules)
 	m.HandleFunc("/api/remote-fetch", s.remoteFetch)
+	m.HandleFunc("/api/remote-hosts", s.remoteHosts)
 	m.HandleFunc("/api/time-export", s.timeExport)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if !s.allowedClient(r.RemoteAddr) {
+			fail(w, 403, errors.New("client IP is not allowed"))
+			return
+		}
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'")
 		if !s.validHost(r.Host, addr) {
@@ -85,8 +100,9 @@ func (s *Server) Handler(addr string) http.Handler {
 			}
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-			if subtle.ConstantTimeCompare([]byte(token), []byte(s.token)) != 1 {
+			auth := r.Header.Values("Authorization")
+			token, bearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if len(auth) != 1 || !bearer || subtle.ConstantTimeCompare([]byte(token), []byte(s.token)) != 1 {
 				fail(w, 401, errors.New("session token required"))
 				return
 			}
@@ -203,13 +219,17 @@ func (s *Server) Start(paths []string, all bool, rules []logs.Rule, languages ..
 	p := &logs.Progress{}
 	s.Progress = p
 	origins := make(map[string]logs.RemoteSource, len(s.remoteSources))
+	readers := make(map[string]logs.SourceOpener, len(s.readers))
+	for path, open := range s.readers {
+		readers[path] = open
+	}
 	for path, origin := range s.remoteSources {
 		origins[path] = origin
 	}
 	s.mu.Unlock()
 	go func() {
 		defer s.jobs.Done()
-		r, err := logs.Analyze(paths, s.dir, logs.Options{All: all, Rules: rules, Languages: languages, Progress: p, RemoteSources: origins})
+		r, err := logs.Analyze(paths, s.dir, logs.Options{All: all, Rules: rules, Languages: languages, Progress: p, RemoteSources: origins, Readers: readers})
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.busy = false
@@ -224,7 +244,11 @@ func (s *Server) Start(paths []string, all bool, rules []logs.Rule, languages ..
 }
 func (s *Server) Close() {
 	s.mu.Lock()
+	s.clearRemotePreview()
 	s.closing = true
+	if s.sourceCancel != nil {
+		s.sourceCancel()
+	}
 	if s.remoteCancel != nil {
 		s.remoteCancel()
 	}
@@ -233,6 +257,10 @@ func (s *Server) Close() {
 	}
 	s.mu.Unlock()
 	s.jobs.Wait()
+	s.mu.Lock()
+	s.readers = nil
+	s.Report = nil
+	s.mu.Unlock()
 }
 func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 	if !method(w, r, "POST") {
@@ -250,6 +278,16 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.RLock()
+	var direct []string
+	var local []string
+	for _, path := range req.Paths {
+		if s.readers[path] != nil {
+			direct = append(direct, path)
+		} else {
+			local = append(local, path)
+		}
+	}
+	req.Paths = local
 	for _, id := range req.Uploads {
 		p, ok := s.uploads[id]
 		if !ok {
@@ -257,13 +295,20 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, errors.New("unknown upload"))
 			return
 		}
-		req.Paths = append(req.Paths, p)
+		if s.readers[p] != nil {
+			direct = append(direct, p)
+		} else {
+			req.Paths = append(req.Paths, p)
+		}
 	}
 	s.mu.RUnlock()
-	if _, err := logs.ExpandPaths(req.Paths); err != nil {
-		fail(w, 400, err)
-		return
+	if len(req.Paths) > 0 {
+		if _, err := logs.ExpandPaths(req.Paths); err != nil {
+			fail(w, 400, err)
+			return
+		}
 	}
+	req.Paths = append(req.Paths, direct...)
 	if _, err := logs.NewParser(req.Rules); err != nil {
 		fail(w, 400, err)
 		return
@@ -428,62 +473,6 @@ func (s *Server) report(w http.ResponseWriter, r *http.Request) {
 	output(w, report)
 }
 
-type entry struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
-	Dir  bool   `json:"dir"`
-	Size int64  `json:"size"`
-}
-
-func (s *Server) browse(w http.ResponseWriter, r *http.Request) {
-	if !method(w, r, "GET") {
-		return
-	}
-	path := r.URL.Query().Get("path")
-	if path == "" {
-		path, _ = os.Getwd()
-	}
-	if path == "roots" {
-		roots := []entry{}
-		if runtime.GOOS == "windows" {
-			for c := 'A'; c <= 'Z'; c++ {
-				p := string(c) + ":\\"
-				if _, err := os.Stat(p); err == nil {
-					roots = append(roots, entry{Name: p, Path: p, Dir: true})
-				}
-			}
-		} else {
-			roots = append(roots, entry{Name: "/", Path: "/", Dir: true})
-		}
-		output(w, map[string]any{"path": "roots", "parent": "roots", "entries": roots})
-		return
-	}
-	path, err := filepath.Abs(path)
-	if err != nil {
-		fail(w, 400, err)
-		return
-	}
-	items, err := os.ReadDir(path)
-	if err != nil {
-		fail(w, 400, err)
-		return
-	}
-	out := []entry{}
-	for _, item := range items {
-		if strings.HasPrefix(item.Name(), ".") {
-			continue
-		}
-		info, err := item.Info()
-		if err != nil {
-			continue
-		}
-		if !item.IsDir() && !info.Mode().IsRegular() {
-			continue
-		}
-		out = append(out, entry{Name: item.Name(), Path: filepath.Join(path, item.Name()), Dir: item.IsDir(), Size: info.Size()})
-	}
-	output(w, map[string]any{"path": path, "parent": filepath.Dir(path), "entries": out})
-}
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	if !method(w, r, "POST") {
 		return
@@ -517,8 +506,14 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, err)
 		return
 	}
+	digest, err := fileDigest(path)
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
 	s.mu.Lock()
-	s.uploads[id] = path
+	id = s.registerImport(id, path, digest)
+	name = filepath.Base(s.uploads[id])
 	s.mu.Unlock()
-	output(w, map[string]string{"id": id, "name": name})
+	output(w, map[string]string{"id": id, "name": name, "digest": digest})
 }

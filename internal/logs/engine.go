@@ -65,18 +65,19 @@ type Evidence struct {
 	Time   string `json:"time,omitempty"`
 }
 type Report struct {
-	Schema    string            `json:"schema"`
-	Version   string            `json:"version"`
-	Created   string            `json:"created"`
-	ElapsedMS int64             `json:"elapsed_ms"`
-	Bytes     int64             `json:"bytes"`
-	Lines     uint64            `json:"lines"`
-	Events    uint64            `json:"events"`
-	Sources   []Source          `json:"sources"`
-	Groups    []*Group          `json:"groups"`
-	Formats   map[string]uint64 `json:"formats"`
-	Notes     []string          `json:"notes"`
-	IndexPath string            `json:"index_path"`
+	Readers   map[string]SourceOpener `json:"-"`
+	Schema    string                  `json:"schema"`
+	Version   string                  `json:"version"`
+	Created   string                  `json:"created"`
+	ElapsedMS int64                   `json:"elapsed_ms"`
+	Bytes     int64                   `json:"bytes"`
+	Lines     uint64                  `json:"lines"`
+	Events    uint64                  `json:"events"`
+	Sources   []Source                `json:"sources"`
+	Groups    []*Group                `json:"groups"`
+	Formats   map[string]uint64       `json:"formats"`
+	Notes     []string                `json:"notes"`
+	IndexPath string                  `json:"index_path"`
 }
 type Progress struct {
 	Bytes  atomic.Int64
@@ -86,6 +87,7 @@ type Progress struct {
 	Cancel atomic.Bool
 }
 type Options struct {
+	Readers       map[string]SourceOpener
 	RemoteSources map[string]RemoteSource
 	Languages     []LanguageRule
 	All           bool
@@ -136,8 +138,21 @@ func ExpandPaths(args []string) ([]string, error) {
 		}
 		return nil
 	}
-	for _, p := range args {
+	for _, input := range args {
+		p, normalizeErr := normalizePath(input)
+		if normalizeErr != nil {
+			return nil, normalizeErr
+		}
+		if p == "" {
+			continue
+		}
 		st, err := os.Stat(p)
+		if err == nil && st.Mode().IsRegular() {
+			if err := add(p); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if err == nil && st.IsDir() {
 			entries, err := os.ReadDir(p)
 			if err != nil {
@@ -153,7 +168,7 @@ func ExpandPaths(args []string) ([]string, error) {
 			continue
 		}
 		if strings.ContainsAny(p, "*?[") {
-			matches, err := filepath.Glob(p)
+			matches, err := globPaths(p)
 			if err != nil {
 				return nil, err
 			}
@@ -161,6 +176,13 @@ func ExpandPaths(args []string) ([]string, error) {
 				return nil, fmt.Errorf("no files match: %s", p)
 			}
 			for _, m := range matches {
+				info, err := os.Stat(m)
+				if err != nil {
+					return nil, err
+				}
+				if info.IsDir() {
+					continue
+				}
 				if err := add(m); err != nil {
 					return nil, err
 				}
@@ -176,6 +198,28 @@ func ExpandPaths(args []string) ([]string, error) {
 	}
 	sort.Strings(paths)
 	return paths, nil
+}
+
+// Preserve an existing directory prefix as literal text, even when it contains glob metacharacters.
+func globPaths(pattern string) ([]string, error) {
+	for parent := filepath.Dir(pattern); ; {
+		if info, err := os.Stat(parent); err == nil && info.IsDir() {
+			relative, err := filepath.Rel(parent, pattern)
+			if err != nil {
+				return nil, err
+			}
+			pairs := []string{"[", "[[]", "*", "[*]", "?", "[?]"}
+			if filepath.Separator != '\\' {
+				pairs = append(pairs, `\`, `\\`)
+			}
+			return filepath.Glob(filepath.Join(strings.NewReplacer(pairs...).Replace(parent), relative))
+		}
+		next := filepath.Dir(parent)
+		if next == parent {
+			return filepath.Glob(pattern)
+		}
+		parent = next
+	}
 }
 func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 	start := time.Now()
@@ -201,7 +245,7 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 			return nil, err
 		}
 	}
-	paths, err = ExpandPaths(paths)
+	paths, err = expandSources(paths, opt.Readers)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +266,12 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 	w := bufio.NewWriterSize(f, 1024*1024)
 	report := &Report{Schema: "log-reviewer/v1", Version: "0.7.1", Created: time.Now().Format(time.RFC3339), Formats: map[string]uint64{}, Groups: []*Group{}, Sources: []Source{}, IndexPath: f.Name(), Notes: []string{"Impact is a heuristic based on log severity; business impact is not inferred.", "Scope lists observed files and logger/service names, not affected users.", "Local timestamps without offsets use the scanning machine's local timezone.", "Grouping masks numeric values and IDs; inspect occurrences before assuming identical causes."}}
 	for _, path := range paths {
-		st, err := os.Stat(path)
+		in, err := openRead(path, opt.Readers)
+		if err != nil {
+			return nil, err
+		}
+		st, err := in.Stat()
+		in.Close()
 		if err != nil {
 			return nil, err
 		}
@@ -243,7 +292,7 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 	for si := range report.Sources {
 		src := &report.Sources[si]
 		src.Languages = []string{}
-		in, err := os.Open(src.Path)
+		in, err := openRead(src.Path, opt.Readers)
 		if err != nil {
 			return nil, err
 		}
@@ -256,6 +305,7 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 		var line uint64
 		var pending *Record
 		var header Header
+		stack := sha256.New()
 		preview := make([]byte, 0, 4096)
 		completedBytes := sourceBytes(report.Sources, si)
 		flush := func() error {
@@ -300,6 +350,7 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 			sig, root := cache.sig, cache.root
 			key := header.Level + "\x00" + header.Logger + "\x00" + sig
 			key += "\x00" + strings.Join(languages, ",")
+			key += "\x00" + hex.EncodeToString(stack.Sum(nil))
 			g := groups[key]
 			if g == nil {
 				if len(groups) >= 100000 {
@@ -395,6 +446,8 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 						}
 						if interested(h.Level, opt.All) {
 							header = h
+							stack.Reset()
+							appendStack(stack, h.Message)
 							preview = preview[:0]
 							preview = append(preview, h.Message...)
 							preview = append(preview, '\n')
@@ -404,6 +457,7 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 							pending = &Record{Source: uint32(si), Offset: lineStart, Length: offset - lineStart, Line: line, Time: h.Time}
 						}
 					} else if pending != nil {
+						appendStack(stack, string(b))
 						pending.Length = offset - pending.Offset
 						if bytesRoot(b) && len(b) > maxPreview-len(preview) { // retain a complete cause when the preview is nearly full
 							t := strings.TrimSpace(string(b))
@@ -445,6 +499,10 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 				}
 			}
 		}()
+		after, statErr := in.Stat()
+		if opt.Readers[src.Path] == nil {
+			after, statErr = os.Stat(src.Path)
+		}
 		closeErr := in.Close()
 		if scanErr != nil {
 			return nil, fmt.Errorf("%s: %w", src.Path, scanErr)
@@ -452,9 +510,8 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 		if closeErr != nil {
 			return nil, closeErr
 		}
-		after, err := os.Stat(src.Path)
-		if err != nil {
-			return nil, err
+		if statErr != nil {
+			return nil, statErr
 		}
 		if after.Size() != src.Size || after.ModTime().UnixNano() != src.Modified {
 			return nil, fmt.Errorf("file changed while scanning: %s; use a stable copy", src.Path)
@@ -470,6 +527,7 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 	sort.SliceStable(report.Groups, func(i, j int) bool { return report.Groups[i].Count > report.Groups[j].Count })
 	report.ElapsedMS = time.Since(start).Milliseconds()
 	success = true
+	report.Readers = opt.Readers
 	return report, nil
 }
 func bytesRoot(b []byte) bool { return strings.HasPrefix(strings.TrimSpace(string(b)), "Caused by:") }

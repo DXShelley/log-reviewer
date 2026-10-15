@@ -59,7 +59,7 @@ func TestAPIWorkflow(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	for _, path := range []string{"/api/groups", "/api/details", "/api/export", "/api/report", "/api/browse"} {
+	for _, path := range []string{"/api/groups", "/api/details", "/api/export", "/api/report"} {
 		w := call("GET", path, "")
 		if w.Code != 200 {
 			t.Fatalf("%s: %d %s", path, w.Code, w.Body.String())
