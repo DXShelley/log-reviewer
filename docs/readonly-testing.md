@@ -25,14 +25,16 @@
 | 路径兼容边界 | `file://localhost/`、百分号编码、不透明 file URI；Windows 盘符、UNC；拒绝 URI 凭据、错误编码、NUL、非文件协议；断开的远程引用提示重新连接 | `TestNormalizePathCompatibility` |
 | 路径展开与 API | 相对路径、当前层目录、通配符、方括号父目录、去重、认证与错误输入 | `TestExpandPathsUserInputs`、`TestLocalPathResolution` |
 | 系统选择器访问限制 | IPv4/IPv6 loopback、外部地址、非法地址、平台能力；拒绝未认证、远程请求、错误方法，不信任 `X-Forwarded-For` 伪造本机来源 | `TestLocalPeerAndPickerAvailability`、`TestPickerAccessGuards` |
-| 远程只读全链路 | 分析、详情、关键字查询和导出；正常 EOF 不缓存；注入读取中断后缓存重试；凭据不进入报告；源内容及修改时间不变 | `TestDirectSourceAndNetworkFallback` |
+| 远程只读全链路 | 分析、详情、关键字查询和导出；正常 EOF 不缓存；注入读取中断后缓存重试；服务器断开后仍能读取缓存详情、按时间导出及再次分析；序列化报告需重新连接；源内容及修改时间不变 | `TestDirectSourceAndNetworkFallback` |
 | 不应缓存的远程失败 | 预览后文件变化、文件删除、认证失败、错误指纹、取消操作均返回错误，不创建缓存 | `TestDirectSourceRejectsUnsafeFallback` |
 | 网络错误识别 | 包装的网络错误、超时、SFTP 连接错误；权限、不存在、取消不视为网络错误 | `TestNetworkFailureClassification` |
-| 远程引用 API | 预览后加入引用、分析、刷新后按引用再次分析、显示别名不改源文件、正常过程不生成日志副本 | `TestRemoteAttachReadOnly` |
+| 远程引用 API | 重复预览和加入相同文件复用引用；分析、刷新后再次分析；时间导出文本/ZIP 内容及远程文件名；显示别名不改源文件；正常过程不生成日志副本；关闭时释放引用并取消连接上下文 | `TestRemoteAttachReadOnly` |
 | 浏览器路径流程 | 原生选择器 API 响应模拟、无需上传、路径格式、添加失败保留输入、重复路径、桌面和手机布局 | `tests/ui-paths.cjs` |
 | 浏览器及 CLI 远程流程 | 指纹确认后自动重试、预览及选择、主机记录、密码和私钥、分析、取消及 CLI | `tests/ui-sftp.cjs` |
 
 Go 的 SFTP 测试使用本机 SSH/SFTP 测试服务和虚构凭据，不依赖真实服务器。网络缓存测试注入传输读取错误，并通过真实 SFTP 连接重试下载；不代表已经模拟了所有网络故障。权限拒绝覆盖错误分类，不声称在 Windows 上通过文件权限位模拟了远端权限拒绝。
+
+缓存复用测试在成功缓存后关闭本地 SFTP 服务，再读取详情、导出时间片段和重新分析，确认可离线复用且缓存路径不变。报告重载测试仅序列化摘要与索引位置，不带进程中的读取回调，要求提示重新连接。正常远程时间导出通过 HTTP 同时校验文本与 ZIP，确保 ZIP 使用原始远程文件名。
 
 ## 运行方式
 

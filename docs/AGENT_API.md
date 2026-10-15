@@ -30,16 +30,20 @@ log-reviewer export --report report.json --group a888c34a40347801 --out evidence
 
 `query --details` 返回 `{details: [...], more: bool}`；详情包含完整位置、事件预览、before/after 上下文和 truncated 标志。单事件预览最多 2 MiB，导出不截断。支持 `--offset` 和 `--limit` 分页。上下文参数为 `--before 20 --after 100`（默认值），分别支持 0–10000 行。关键字或正则搜索以事件中首次匹配所在行为中心，返回 `context_line` 和 `context_text`；同时提供关键字和正则时优先以关键字为中心。无文本条件时仍按完整事件的前后边界读取。上下文每个方向最多显示 2 MiB，达到限制时返回 `context_truncated: true`。
 
-## HTTP API
+## HTTPS / HTTP API
 
 ```sh
 log-reviewer serve --no-browser --port 8765 --keep-cache
 ```
 
-启动输出最终访问 URL、API token 和缓存目录。请求附带 `Authorization: Bearer <token>`。默认监听全部 IPv4 并尝试 IPv6，端口不可用时自动分配。仅本机监听用 `--host 127.0.0.1`，域名访问用 `--allowed-hosts logs.example.com`。跨站 Origin、未在白名单的域名 Host 和未认证 API 会被拒绝；IP 地址和同源请求可远程访问。详见 [服务器说明](server-usage.md)。
+启动输出默认 HTTPS URL（`GUI:`，`--https-port 8766`）、HTTP 兼容 URL（`HTTP:`，`--port 8765`）、API token 和缓存目录；最终端口以输出为准。`--http=false` 关闭明文入口。默认自签名证书需客户端显式信任，或使用 `--tls-cert` / `--tls-key` 指定受信任证书。请求附带 `Authorization: Bearer <token>`，两个入口共用 token 和来源 IP 白名单；重启生成新 token，不写入状态文件。
+
+默认监听全部 IPv4 并尝试 IPv6。仅本机监听用 `--host 127.0.0.1`；`--allowed-hosts logs.example.com` 限制访问域名，`--allowed-client-ips "127.0.0.1,10.0.0.0/8"` 限制实际连接来源，两者含义不同。来源限制不信任转发头。跨站 Origin、未允许的域名 Host 和未认证 API 会被拒绝。详见 [服务器说明](server-usage.md) 与 [安全测试矩阵](security-testing.md)。
 
 | 方法与路由 | 参数 / 内容 |
 | --- | --- |
+| `GET /api/access-settings` | 返回 `allowed_client_ips` 和当前 TCP 连接的 `remote_addr` |
+| `PUT /api/access-settings` | JSON `{ "allowed_client_ips": ["127.0.0.1", "10.0.0.0/8"] }`，保存并即时应用；空数组关闭限制 |
 | `POST /api/analyze` | JSON `{paths: ["/path/app.log"], all: false, rules: []}`；返回 accepted，异步分析 |
 | `GET /api/status` | busy、bytes、total、events、lines、error、ready；完成时附 report |
 | `POST /api/cancel` | 取消正在进行的分析 |
@@ -48,6 +52,8 @@ log-reviewer serve --no-browser --port 8765 --keep-cache
 | `GET /api/export` | 同上，返回符合条件的完整原始事件文本 |
 | `GET /api/time-export` | from/to 必填，mode=merged 或 files，source 可选；返回原始时间片段文本或分文件 ZIP |
 | `GET /api/report` | 完整 JSON 报告 |
+| `GET /api/import-settings` | 返回 remote_directory、session_directory、系统默认保存目录、file_patterns、默认识别规则与 os |
+| `PUT /api/import-settings` | JSON `{remote_directory: "绝对路径", file_patterns: ["*.log", "*.txt", "*.text"]}`；持久保存并迁移当前会话远程文件，更新分析与缓存引用；分析或获取中返回 409，迁移失败保留原文件与配置 |
 | `POST /api/upload?name=...` | body 为原始文件，返回 upload id；analyze 的 uploads 可引用该 ID |
 | `GET /api/paths` | 返回工具所在主机 hostname、系统 os、相对路径基准 working_directory；需要会话认证 |
 | `POST /api/paths` | body 为 `{"paths":["C:\\logs\\*.log"]}`；校验并展开 1–1000 条本机路径，返回去重后的 paths 与主机上下文，不上传也不分析 |
@@ -59,7 +65,9 @@ log-reviewer serve --no-browser --port 8765 --keep-cache
 
 `from/to` 包含端点；无时区时间按扫描主机本地时区理解，跨机器集成建议传带时区 RFC3339。`source` 为零基文件索引，缺省或 -1 代表全部。keyword 忽略大小写并匹配完整事件；regex 匹配逐物理行，使用 Go RE2 语法。
 
-HTTP 非成功响应为 `{error: "..."}`。分析失败保留上一次成功报告，调用方必须检查 status.error 并确认本次任务完成，不能把旧报告误认成新分析结果。单实例同一时间只接受一个分析任务。
+HTTP 非成功响应为 `{error: "..."}`。`401` 表示 token 无效；来源 IP、Host 或 Origin 被拒绝返回 `403`。白名单非法或会排除当前配置请求来源时返回 `400`，持久化失败返回 `500` 且不更改生效规则。GUI 和 API 保存至 `--state-file`，默认二进制同目录 `log-reviewer-state.json`，下次启动自动加载；同文件中的其他工具设置保留。只有持有 token 的允许来源可修改。
+
+分析失败保留上一次成功报告，调用方必须检查 status.error 并确认本次任务完成，不能把旧报告误认成新分析结果。单实例同一时间只接受一个分析任务。
 
 SFTP POST 示例：`{"host":"192.168.1.20","port":22,"user":"logreader","password":"...","fingerprint":"SHA256:...","path":"/var/log/myapp","pattern":"*.log\n*.txt\nregex:^app-\\d{4}\\.log$","recursive":false,"max_files":50,"max_bytes":10737418240}`。`pattern` 每行一条通配符或 `regex:` 正则，任一匹配即选中，兼容逗号分隔的通配符；`max_files` 默认 50。私钥用 private_key/passphrase；也可指定工具所在机器的 known_hosts 文件路径。不会保存凭据，不支持不验证主机密钥。
 

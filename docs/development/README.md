@@ -37,6 +37,8 @@ GUI 通过 Go embed 打包，修改前端后必须重新构建并重启程序。
 
 ## 浏览器回归
 
+HTTPS、HTTP 兼容、证书信任、TLS 版本、token 和 IP 白名单的用例矩阵及临时构建命令见 [访问控制测试](../security-testing.md)。执行 `node tests/ui-https.cjs`、`node tests/ui-access.cjs` 和 `node tests/server-host.cjs`。`GUI:` 行现在是 HTTPS；HTTP 兼容测试应读取 `HTTP:` 行。自签名证书的测试例外只作用于独立测试 context，不关闭全局 TLS 校验。
+
 只读源文件、路径格式、本机导入、远程直读和网络异常缓存的用例矩阵、运行命令及人工验收见 [只读读取与路径兼容测试](../readonly-testing.md)。浏览器测试可用 `LR_TEST_BINARY` 指定临时构建的程序，避免依赖过期的 `dist/` 产物。
 
 已有测试通过 Playwright 连接本机 Chrome `127.0.0.1:9222`，使用独立浏览器 Profile。设置 `NODE_PATH` 指向安装的 Playwright 后执行 `node tests/ui-design.cjs`、`node tests/ui-workspace.cjs`、`node tests/gui-smoke.cjs`。更多入口见 [项目状态](../PROJECT_STATUS.md)。浏览器测试目前属于本地验证，不宣称已在 GitHub CI 中运行。
