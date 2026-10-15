@@ -1,0 +1,23 @@
+name: 问题报告
+description: 提交可复现的问题
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 预期和实际行为
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 版本、系统和架构
+      placeholder: v0.7.0 / Windows 11 / amd64
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤与最小脱敏日志
+      description: 不要上传生产凭据、私钥、令牌或未脱敏业务日志。
+    validations:
+      required: true

@@ -1,0 +1,15 @@
+name: 功能建议
+description: 说明实际排查场景和所需能力
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景与当前障碍
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望行为与替代方案
+    validations:
+      required: true

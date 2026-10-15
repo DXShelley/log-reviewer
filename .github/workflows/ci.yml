@@ -1,0 +1,33 @@
+name: Development CI
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+permissions:
+  contents: read
+concurrency:
+  group: dev-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Format
+        shell: bash
+        run: test -z "$(gofmt -l cmd internal tests tools)"
+      - run: go mod verify
+      - run: go test ./... -timeout 5m
+      - run: go vet ./...
+      - name: Documentation links
+        if: runner.os == 'Linux'
+        run: python3 scripts/check-doc-links.py

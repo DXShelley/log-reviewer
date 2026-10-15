@@ -1,5 +1,14 @@
 # Log Reviewer
 
+[![Development CI](https://github.com/DXShelley/log-reviewer/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/DXShelley/log-reviewer/actions/workflows/ci.yml)
+[![Delivery CI](https://github.com/DXShelley/log-reviewer/actions/workflows/delivery.yml/badge.svg?branch=main)](https://github.com/DXShelley/log-reviewer/actions/workflows/delivery.yml)
+
+[下载发行版](https://github.com/DXShelley/log-reviewer/releases) · [查看源码（dev）](https://github.com/DXShelley/log-reviewer/tree/dev) · [文档中心](docs/README.md) · [参与开发](CONTRIBUTING.md) · [安全报告](SECURITY.md)
+
+仓库默认 `main` 提供交付文件；完整 Go 源码、开发脚本和测试位于 `dev`，贡献代码请提交到 `dev`。
+
+当前版本 **v0.7.1**：收紧文件操作，拆分筛选/导出，简化上下文控制，为分析和导出添加遮罩；详见 [变更记录](docs/CHANGELOG.md)。
+
 v0.7.0 增加离线 Highlight.js 日志着色、Lucide 图标、按功能分组的界面，以及基于堆栈与请求证据的自动上下文。布局选择移到右上角，单条手动上下文仍优先。详见 [工作区与时间导出](docs/workspace-usage.md)，验证见 [v0.7.0 记录](docs/VALIDATION-0.7.0.md)。
 
 实用、简洁的本地日志分类工具。单个二进制同时提供 terminal 和浏览器 GUI，无需安装运行时、数据库或日志平台。日志不会发送到云端。
