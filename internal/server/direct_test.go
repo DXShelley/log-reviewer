@@ -58,6 +58,10 @@ func TestRemoteAttachReadOnly(t *testing.T) {
 		t.Fatal(s.remoteState)
 	}
 	item := s.remoteState.Downloads[0]
+	wantDigest, err := fileDigest(source)
+	if err != nil || item.Digest != wantDigest || item.Digest == "" {
+		t.Fatalf("direct import must use the same content digest as local files: %v, %+v", err, item)
+	}
 	if w := call("remote-fetch", remoteRequest{Action: "preview", Options: remote.Options{Host: host, Port: number, User: "tester", Password: "fixture-password", Fingerprint: fixture.Fingerprint, Path: "app.log"}}); w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}

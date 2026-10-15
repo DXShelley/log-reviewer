@@ -25,6 +25,13 @@ type DirectSource struct {
 	cached   string
 }
 
+// RefreshOptions renews authentication without detaching existing report readers.
+func (s *DirectSource) RefreshOptions(options Options) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Options = options
+}
+
 // RelocateCache updates private cache paths after the server moves its files.
 func (s *DirectSource) RelocateCache(oldRoot, newRoot string) {
 	s.mu.Lock()
@@ -70,11 +77,14 @@ func (f *sessionFile) Close() error {
 }
 
 func (s *DirectSource) connect() (logs.ReadFile, error) {
+	s.mu.Lock()
+	options := s.Options
+	s.mu.Unlock()
 	ctx, cancel := context.WithCancel(s.context())
 	ready := make(chan logs.ReadFile, 1)
 	done := make(chan error, 1)
 	go func() {
-		done <- withSFTP(ctx, s.Options, nil, func(client remoteFS, _ Options) error {
+		done <- withSFTP(ctx, options, nil, func(client remoteFS, _ Options) error {
 			raw, err := client.Open(s.File.Path)
 			if err != nil {
 				return err

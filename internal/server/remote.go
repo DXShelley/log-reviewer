@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -21,6 +22,7 @@ import (
 )
 
 type remoteDownload struct {
+	SourcePath string `json:"source_path,omitempty"`
 	Digest     string `json:"digest"`
 	ID         string `json:"id"`
 	Name       string `json:"name"`
@@ -176,6 +178,8 @@ func (s *Server) downloadRemote(ctx context.Context, cancel context.CancelFunc, 
 	update := func(p remote.Progress) { s.mu.Lock(); s.remoteState.Progress = p; s.mu.Unlock() }
 	var manifest *remote.Manifest
 	var files []remote.PreviewFile
+	var sources []*remote.DirectSource
+	var digests []string
 	var err error
 	if action == "preview" {
 		var fingerprint string
@@ -194,6 +198,20 @@ func (s *Server) downloadRemote(ctx context.Context, cancel context.CancelFunc, 
 					err = errors.New("远程文件已变化，请重新预览")
 					break
 				}
+			}
+		}
+		if err == nil {
+			for i, file := range selection {
+				source := &remote.DirectSource{Context: ctx, Options: options, File: file, CacheDir: filepath.Join(destination, strconv.Itoa(i))}
+				update(remote.Progress{Stage: "hashing", Current: file.Path, Files: i, TotalFiles: len(selection)})
+				digest, hashErr := sourceDigest(ctx, source.Open)
+				if hashErr != nil {
+					err = fmt.Errorf("内容校验失败 %q：%w", file.Path, hashErr)
+					break
+				}
+				source.Context = s.sourceContext
+				sources = append(sources, source)
+				digests = append(digests, digest)
 			}
 		}
 	} else if action == "download" {
@@ -242,19 +260,25 @@ func (s *Server) downloadRemote(ctx context.Context, cancel context.CancelFunc, 
 		if s.readers == nil {
 			s.readers = map[string]logs.SourceOpener{}
 		}
+		if s.uploadDigests == nil {
+			s.uploadDigests = map[string]string{}
+		}
 		for i, file := range selection {
-			identity, _ := json.Marshal([]any{options.Host, options.Port, options.User, options.Fingerprint, file})
+			identity, _ := json.Marshal([]any{options.Host, options.Port, options.User, options.Fingerprint, file, digests[i]})
 			sum := sha256.Sum256(identity)
 			uploadID := "remote-" + hex.EncodeToString(sum[:])
 			key := "sftp:" + uploadID
 			if s.readers[key] == nil {
-				source := &remote.DirectSource{Context: s.sourceContext, Options: options, File: file, CacheDir: filepath.Join(destination, strconv.Itoa(i))}
+				source := sources[i]
 				s.readers[key] = source.Open
 				s.directSources[key] = source
+			} else {
+				s.directSources[key].RefreshOptions(options)
 			}
 			s.uploads[uploadID] = key
+			s.uploadDigests[uploadID] = digests[i]
 			s.remoteSources[key] = logs.RemoteSource{Protocol: "sftp", Host: options.Host, Port: options.Port, Path: file.Path, Modified: file.Modified, CapturedAt: time.Now().Format(time.RFC3339)}
-			s.remoteState.Downloads = append(s.remoteState.Downloads, remoteDownload{ID: uploadID, Name: path.Base(file.Path), RemotePath: file.Path})
+			s.remoteState.Downloads = append(s.remoteState.Downloads, remoteDownload{ID: uploadID, Name: path.Base(file.Path), RemotePath: file.Path, Digest: digests[i], SourcePath: key})
 		}
 		s.remoteState.Stage = "complete"
 		return

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"log-reviewer/internal/remote"
@@ -56,5 +57,33 @@ func TestRepeatedAttachKeepsRelocatableReportReader(t *testing.T) {
 	attach("second")
 	if s.directSources[key] != original {
 		t.Fatal("repeated attach detached the report reader from cache relocation")
+	}
+	// Simulate credentials expiring in an existing source, then reconnect.
+	original.Options.Password = "expired-password"
+	attach("renewed")
+	f, err := original.Open()
+	if err != nil {
+		t.Fatalf("report reader did not receive renewed credentials: %v", err)
+	}
+	f.Close()
+	// Content changes can preserve both length and timestamp.
+	p := filepath.Join(root, "app.log")
+	info, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(strings.Replace(string(data), "repeat", "update", 1)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(p, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	attach("changed-content")
+	if s.remoteState.Downloads[0].ID == id {
+		t.Fatal("changed content reused old source identity")
 	}
 }

@@ -52,6 +52,7 @@ function matchesImportFormat(name){
   try{
    const result=await json('import-settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({remote_directory:directory.value.trim(),file_patterns:patterns})});
    for(const [previous,next]of Object.entries(result.path_changes||{}))if(sourceDisplayPaths.has(previous)){sourceDisplayPaths.set(next,sourceDisplayPaths.get(previous));sourceDisplayPaths.delete(previous)}
+   for(const [previous,next]of Object.entries(result.path_changes||{}))if(pathImports.has(previous)){const item=pathImports.get(previous);pathImports.set(next,{...item,path:next});pathImports.delete(previous)}
    files=files.map(p=>result.path_changes?.[p]||p);renderFiles();
    applyFileSettings(result);dialog.close();toast(result.warning||'文件设置已保存，已有文件已迁移',!!result.warning);
   }catch(e){message.textContent=e.message}
