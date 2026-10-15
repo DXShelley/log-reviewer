@@ -83,12 +83,12 @@ async function acceptIdentifiedImport(item){
  }
  if(item.path){pathImports.set(item.path,item);if(!files.includes(item.path))files.push(item.path)}else uploads.push(item);renderFiles();return true;
  }
-async function uploadList(list){if(importing||busy)return false;const items=Array.from(list);if(!items.length)return false;clearError();importing=true;setBusy(busy);let added=0;try{for(const f of items){$('footer-status').textContent='导入 '+f.name+'…';const u=await json('upload?name='+encodeURIComponent(f.name),{method:'POST',body:f});if(await acceptImport(u))added++} $('footer-status').textContent=added+' 个文件已导入，'+(items.length-added)+' 个文件已跳过';return true}catch(e){error(e);return false}finally{importing=false;$('upload').value='';setBusy(busy)}}
+async function uploadList(list){if(importing||busy)return false;const items=Array.from(list);if(!items.length)return false;clearError();importing=true;setBusy(busy);let added=0;try{await ensureFileSettings();for(const f of items){if(!matchesImportFormat(f.name))continue;$('footer-status').textContent='导入 '+f.name+'…';const u=await json('upload?name='+encodeURIComponent(f.name),{method:'POST',body:f});if(await acceptImport(u))added++} $('footer-status').textContent=added+' 个文件已导入，'+(items.length-added)+' 个文件已跳过';return true}catch(e){error(e);return false}finally{importing=false;$('upload').value='';setBusy(busy)}}
 async function chooseImport(kind){
  $('import-dialog').close();if(busy||importing)return;
  try{await ensureFileSettings();const context=await json('paths',{signal:AbortSignal.timeout(30000)});
   if(context.native_picker){importing=true;setBusy(busy);$('footer-status').textContent='请在本机系统窗口中选择日志';const result=await json('pick-paths?kind='+kind,{method:'POST'});const added=await acceptPaths(result.paths||[]);$('footer-status').textContent='已导入 '+added+' 个文件，跳过 '+((result.paths||[]).length-added)+' 个文件';return}
-  if(context.local_access){$('paths-panel').hidden=false;$('paths').focus();toast('请填写本机文件或目录路径，直接只读分析');return}
+  if(context.local_access&&fileSettings?.show_path_input){$('paths-panel').hidden=false;$('paths').focus();toast('请填写本机文件或目录路径，直接只读分析');return}
   $(kind==='files'?'upload':'upload-directory').click();
  }catch(e){error(e)}finally{importing=false;setBusy(busy)}
 }

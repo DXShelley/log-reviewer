@@ -28,6 +28,8 @@ import (
 var assets embed.FS
 
 type Server struct {
+	HideFilePicker   bool
+	ShowPathInput    bool
 	access           accessPolicy
 	rules            *logs.RuleStore
 	mu               sync.RWMutex
@@ -323,6 +325,15 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 		req.Paths = resolved
 	}
 	req.Paths = append(req.Paths, direct...)
+	for _, p := range direct {
+		s.mu.RLock()
+		origin := s.remoteSources[p]
+		s.mu.RUnlock()
+		if !matchesFile(filepath.Base(origin.Path), s.filePatterns()) {
+			fail(w, 400, errors.New("远程文件不符合设置中的识别格式"))
+			return
+		}
+	}
 	if _, err := logs.NewParser(req.Rules); err != nil {
 		fail(w, 400, err)
 		return
@@ -492,6 +503,10 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := filepath.Base(r.URL.Query().Get("name"))
+	if !matchesFile(name, s.filePatterns()) {
+		fail(w, 400, errors.New("文件不符合设置中的识别格式"))
+		return
+	}
 	if name == "." || name == "" {
 		fail(w, 400, errors.New("filename required"))
 		return

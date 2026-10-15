@@ -140,3 +140,5 @@ SFTP 端到端验证使用自带的本地测试服务器，不连接真实业务
 go build -o .work/sftp-fixture.exe ./tests/sftp-fixture
 node tests/ui-sftp.cjs
 ```
+
+GUI 启动参数、统一文件格式和分析主机说明见 [GUI 设置](docs/gui-settings.md)。

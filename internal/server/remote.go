@@ -181,9 +181,35 @@ func (s *Server) downloadRemote(ctx context.Context, cancel context.CancelFunc, 
 	var sources []*remote.DirectSource
 	var digests []string
 	var err error
+	patterns := s.filePatterns()
+	filter := func(input []remote.PreviewFile) []remote.PreviewFile {
+		result := make([]remote.PreviewFile, 0, len(input))
+		for _, file := range input {
+			if matchesFile(path.Base(file.Path), patterns) {
+				result = append(result, file)
+			}
+		}
+		return result
+	}
+	for _, file := range selection {
+		if !matchesFile(path.Base(file.Path), patterns) {
+			err = errors.New("远程文件不符合设置中的识别格式")
+			break
+		}
+	}
+	if err != nil {
+		s.mu.Lock()
+		s.remoteState.Busy = false
+		s.remoteCancel = nil
+		s.remoteState.Error = err.Error()
+		s.remoteState.Stage = "failed"
+		s.mu.Unlock()
+		return
+	}
 	if action == "preview" {
 		var fingerprint string
 		files, fingerprint, err = remote.Preview(ctx, options, update)
+		files = filter(files)
 		options.Fingerprint = fingerprint
 	} else if action == "attach" {
 		// Revalidate metadata before registering references; never download here.
@@ -217,7 +243,10 @@ func (s *Server) downloadRemote(ctx context.Context, cancel context.CancelFunc, 
 	} else if action == "download" {
 		manifest, err = remote.DownloadSelected(ctx, options, selection, destination, update)
 	} else {
-		manifest, err = remote.Download(ctx, options, destination, update)
+		files, _, err = remote.Preview(ctx, options, update)
+		if err == nil {
+			manifest, err = remote.DownloadSelected(ctx, options, filter(files), destination, update)
+		}
 	}
 	var saveError error
 	if err == nil {
