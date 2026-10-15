@@ -56,7 +56,7 @@ log-reviewer serve --no-browser --port 8765 --keep-cache
 | `PUT /api/import-settings` | JSON `{remote_directory: "绝对路径", file_patterns: ["*.log", "*.txt", "*.text"]}`；持久保存并迁移当前会话远程文件，更新分析与缓存引用；分析或获取中返回 409，迁移失败保留原文件与配置 |
 | `POST /api/upload?name=...` | body 为原始文件，返回 upload id；analyze 的 uploads 可引用该 ID |
 | `GET /api/paths` | 返回工具所在主机 hostname、系统 os、相对路径基准 working_directory；需要会话认证 |
-| `POST /api/paths` | body 为 `{"paths":["C:\\logs\\*.log"]}`；校验并展开 1–1000 条本机路径，返回去重后的 paths 与主机上下文，不上传也不分析 |
+| `POST /api/paths` | body 为 `{"paths":["C:\\logs\\*.log"],"identify":true}`；校验并展开 1–1000 条本机路径，返回路径去重后的 paths 与主机上下文；可选 identify 默认为 false，启用后流式读取并返回 imports（path、name、digest、可选 remote_path），不复制也不分析 |
 | `POST /api/pick-paths?kind=files` | Windows 本机访问打开系统多文件选择器；`kind=directory` 选择目录，返回只读源路径，不复制文件；需要认证，远程访问拒绝 |
 | `POST /api/remote-fetch` | SFTP 连接与选择配置，返回任务 id，异步获取 |
 | `GET /api/remote-fetch` | 当前获取任务的 busy、stage、bytes、total、files、total_files、downloads、warnings、error |
@@ -64,6 +64,10 @@ log-reviewer serve --no-browser --port 8765 --keep-cache
 | `GET/PUT/DELETE /api/language-rules` | 语言列表、保存单语言、按 ?id 恢复/删除 |
 
 `from/to` 包含端点；无时区时间按扫描主机本地时区理解，跨机器集成建议传带时区 RFC3339。`source` 为零基文件索引，缺省或 -1 代表全部。keyword 忽略大小写并匹配完整事件；regex 匹配逐物理行，使用 Go RE2 语法。
+
+`identify: true` 也支持本进程仍连接的 `sftp:` 来源引用；校验失败或文件大小、修改时间变化返回 400。它需要完整读取文件，大文件调用需预留读取时间，取消请求会中止校验。GUI 每批导入前重新校验已有可变源，失败时弃用旧摘要，再使用 imports.digest 与上传及远程直读返回的 digest 去重；路径接口返回所有不同路径的候选项，不代调用方选择去重或同名处理策略。直接调用 `/api/analyze` 保留原有按来源路径分析的语义。
+
+远程 `attach` 的 `downloads` 条目含 `source_path`（`sftp:` 引用），可提交给 `/api/paths` 重新校验；引用标识包含内容摘要，重复连接相同内容会更新内存认证配置。普通上传只与本地缓存副本合并，保留可独立于远程连接读取的本地副本；GUI 遇到相同内容的远程引用时优先使用该上传副本。
 
 HTTP 非成功响应为 `{error: "..."}`。`401` 表示 token 无效；来源 IP、Host 或 Origin 被拒绝返回 `403`。白名单非法或会排除当前配置请求来源时返回 `400`，持久化失败返回 `500` 且不更改生效规则。GUI 和 API 保存至 `--state-file`，默认二进制同目录 `log-reviewer-state.json`，下次启动自动加载；同文件中的其他工具设置保留。只有持有 token 的允许来源可修改。
 
