@@ -48,8 +48,10 @@ log-reviewer serve --no-browser --port 8765 --keep-cache
 | `GET /api/export` | 同上，返回符合条件的完整原始事件文本 |
 | `GET /api/time-export` | from/to 必填，mode=merged 或 files，source 可选；返回原始时间片段文本或分文件 ZIP |
 | `GET /api/report` | 完整 JSON 报告 |
-| `GET /api/browse?path=...` | 本机文件选择；path=roots 列磁盘 / 根目录 |
 | `POST /api/upload?name=...` | body 为原始文件，返回 upload id；analyze 的 uploads 可引用该 ID |
+| `GET /api/paths` | 返回工具所在主机 hostname、系统 os、相对路径基准 working_directory；需要会话认证 |
+| `POST /api/paths` | body 为 `{"paths":["C:\\logs\\*.log"]}`；校验并展开 1–1000 条本机路径，返回去重后的 paths 与主机上下文，不上传也不分析 |
+| `POST /api/pick-paths?kind=files` | Windows 本机访问打开系统多文件选择器；`kind=directory` 选择目录，返回只读源路径，不复制文件；需要认证，远程访问拒绝 |
 | `POST /api/remote-fetch` | SFTP 连接与选择配置，返回任务 id，异步获取 |
 | `GET /api/remote-fetch` | 当前获取任务的 busy、stage、bytes、total、files、total_files、downloads、warnings、error |
 | `DELETE /api/remote-fetch` | 取消当前获取 |
@@ -59,7 +61,15 @@ log-reviewer serve --no-browser --port 8765 --keep-cache
 
 HTTP 非成功响应为 `{error: "..."}`。分析失败保留上一次成功报告，调用方必须检查 status.error 并确认本次任务完成，不能把旧报告误认成新分析结果。单实例同一时间只接受一个分析任务。
 
-SFTP POST 示例：`{"host":"192.168.1.20","port":22,"user":"logreader","password":"...","fingerprint":"SHA256:...","path":"/var/log/myapp","pattern":"*.log,*.txt","recursive":false,"max_files":1000,"max_bytes":10737418240}`。私钥用 private_key/passphrase；也可指定工具所在机器的 known_hosts 文件路径。不会保存凭据，不支持不验证主机密钥。
+SFTP POST 示例：`{"host":"192.168.1.20","port":22,"user":"logreader","password":"...","fingerprint":"SHA256:...","path":"/var/log/myapp","pattern":"*.log\n*.txt\nregex:^app-\\d{4}\\.log$","recursive":false,"max_files":50,"max_bytes":10737418240}`。`pattern` 每行一条通配符或 `regex:` 正则，任一匹配即选中，兼容逗号分隔的通配符；`max_files` 默认 50。私钥用 private_key/passphrase；也可指定工具所在机器的 known_hosts 文件路径。不会保存凭据，不支持不验证主机密钥。
+
+未知主机获取失败时，状态额外提供 `host_key: {host, fingerprint}` 供界面显示与核实；核实后可在下一次请求中传入该 `fingerprint`。不会自动信任或修改 known_hosts。显式填写的入口路径支持符号链接，目录扫描继续跳过子项中的符号链接。
+
+GUI 两阶段流程：先向 `POST /api/remote-fetch` 提交连接配置和 `action:"preview"`，轮询直到 `stage:"preview"`，取得 `preview_id` 与 `preview_files:[{path,size,modified}]`。预览最多扫描 10000 个匹配文件，不下载内容；成功的空列表也可返回。再提交 `{action:"attach",preview_id,selected_paths:["远程路径"]}`，注册只读远程引用，返回的 `downloads` 字段保留兼容名称，实际不下载；将其中 `id` 传给分析接口的 `uploads`。详情、搜索、导出继续通过只读 SFTP 打开，网络错误时才缓存重试。拒绝空选择、重复路径、过期预览、超出数量/大小限制或不属于预览的路径。预览内存凭据 15 分钟有效；已加入的引用保留内存凭据至工具关闭，报告不包含凭据。`action:"download"` 和省略 `action` 的旧请求保持显式下载语义。
+
+`GET /api/remote-hosts` 返回 `{hosts:[...]}`，包含成功连接后的非敏感配置，供下次回填；与访问控制配置一同保存至 `--state-file`，最多保留 20 条。响应和状态文件不包含密码、私钥内容或私钥口令。
+
+`pattern` 还支持独立的 `exclude-dir:` 行，如 `*.log\nexclude-dir:backup\nexclude-dir:cache*`。`recursive=true` 时按各层级的目录名通配符跳过匹配目录及其全部内容；规则不排除显式选择的入口目录。
 
 轮询时匹配任务 id，等待 busy=false，检查 error；仅成功后的 downloads[].id 可用于 analyze 的 uploads。失败/取消不返回不完整副本。HTTP 接口不会自动分析，GUI 的“获取后分析”由客户端发起下一次 analyze 请求。
 

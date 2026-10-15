@@ -12,19 +12,12 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Verify delivery
+      - name: Reject generated artifacts
         shell: bash
         run: |
-          cd dist
-          test "$(wc -l < SHA256SUMS.txt)" -eq 6
-          sha256sum --check SHA256SUMS.txt
-          for os in windows linux darwin; do
-            for arch in amd64 arm64; do
-              suffix=''; if [ "$os" = windows ]; then suffix='.exe'; fi
-              file="log-reviewer-$os-$arch$suffix"
-              test -s "$file"
-              test "$(stat -c %s "$file")" -le 10485760
-            done
-          done
+          if git ls-files | grep -Ei '(^|/)(dist|node_modules|reports|\.work)/|\.(exe|dll|so|dylib|zip|tar\.gz)$'; then
+            echo 'Publish binaries as GitHub Release assets, never repository files.'
+            exit 1
+          fi
       - name: Documentation links
         run: python3 scripts/check-doc-links.py

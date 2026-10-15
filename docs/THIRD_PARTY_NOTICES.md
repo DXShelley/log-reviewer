@@ -6,6 +6,7 @@ SFTP 与 GUI 使用以下组件。分发二进制时请同时保留本文件及 
 
 - Highlight.js 11.11.1：BSD 3-Clause，离线精简核心及本项目的日志语法；完整许可见 [highlight.js-LICENSE.txt](licenses/highlight.js-LICENSE.txt)。
 - Lucide 0.468.0：ISC，选定图标，包含 Feather 的 MIT 来源说明；完整许可见 [lucide-LICENSE.txt](licenses/lucide-LICENSE.txt)。
+- mark.js 8.11.1：MIT，离线日志查询高亮；完整许可见 [mark.js-LICENSE.txt](licenses/mark.js-LICENSE.txt)。原始 npm 包的 `dist/mark.min.js` 放在 `internal/server/web/vendor/`，作为 Go embed 必需的浏览器运行资源保留，不属于应用发行二进制。
 
 浏览器产物为 `internal/server/web/vendor/log-components.js`，通过 Go embed 内嵌，运行时无需 CDN、npm 或网络。`scripts/build-web-vendor.cjs` 使用 esbuild 对选定核心与图标进行 tree shaking，esbuild 仅为开发构建工具，不进入运行时。源码包取自公开 npm registry，固定版本；库升级时重新构建并复验日志原文、HTML 转义和显示性能。
 

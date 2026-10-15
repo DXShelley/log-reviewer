@@ -16,6 +16,7 @@
 ## 开发与维护
 
 - [开发环境与代码结构](development/README.md)
+- [只读读取、路径兼容与远程缓存测试](readonly-testing.md)
 - [贡献指南](../CONTRIBUTING.md) / [安全报告](../SECURITY.md)
 - [项目状态与维护入口](PROJECT_STATUS.md)
 - [变更记录](CHANGELOG.md)
