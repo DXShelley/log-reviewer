@@ -59,12 +59,23 @@ func matchesFile(name string, patterns []string) bool {
 	return false
 }
 
-// Explicit files remain selectable; only directory discovery uses format rules.
 func (s *Server) expandImportPaths(paths []string) ([]string, error) {
-	return logs.ExpandPaths(paths, s.filePatterns()...)
+	patterns := s.filePatterns()
+	expanded, err := logs.ExpandPaths(paths, patterns...)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]string, 0, len(expanded))
+	for _, p := range expanded {
+		if matchesFile(filepath.Base(p), patterns) {
+			filtered = append(filtered, p)
+		}
+	}
+	return filtered, nil
 }
 
 type importSettings struct {
+	IncludeAll      *bool    `json:"include_all,omitempty"`
 	RemoteDirectory string   `json:"remote_directory"`
 	FilePatterns    []string `json:"file_patterns"`
 }
@@ -77,7 +88,11 @@ func (s *Server) importSettings(w http.ResponseWriter, r *http.Request) {
 		if base == "" {
 			base = defaultRemoteDirectory()
 		}
-		output(w, map[string]any{"remote_directory": base, "session_directory": s.remoteDir, "default_remote_directory": defaultRemoteDirectory(), "file_patterns": s.filePatterns(), "default_file_patterns": defaultFilePatterns, "os": runtime.GOOS})
+		hostname, _ := os.Hostname()
+		s.access.mu.RLock()
+		includeAll := s.access.config.IncludeAll
+		s.access.mu.RUnlock()
+		output(w, map[string]any{"remote_directory": base, "session_directory": s.remoteDir, "default_remote_directory": defaultRemoteDirectory(), "file_patterns": s.filePatterns(), "default_file_patterns": defaultFilePatterns, "os": runtime.GOOS, "hostname": hostname, "include_all": includeAll, "show_file_picker": !s.HideFilePicker, "show_path_input": s.ShowPathInput})
 		return
 	}
 	if r.Method != http.MethodPut {
@@ -136,6 +151,9 @@ func (s *Server) importSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	s.access.mu.Lock()
 	cfg := s.access.config
+	if request.IncludeAll != nil {
+		cfg.IncludeAll = *request.IncludeAll
+	}
 	cfg.RemoteDirectory, cfg.FilePatterns = request.RemoteDirectory, request.FilePatterns
 	if s.access.path != "" {
 		if err := s.access.save(cfg); err != nil {

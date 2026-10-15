@@ -15,6 +15,7 @@ import (
 )
 
 type accessConfig struct {
+	IncludeAll       bool         `json:"include_all,omitempty"`
 	RemoteDirectory  string       `json:"remote_directory,omitempty"`
 	FilePatterns     []string     `json:"file_patterns,omitempty"`
 	AllowedClientIPs []string     `json:"allowed_client_ips"`
@@ -176,6 +177,7 @@ func (s *Server) accessSettings(w http.ResponseWriter, r *http.Request) {
 		cfg.RemoteHosts = s.access.config.RemoteHosts
 		cfg.RemoteDirectory = s.access.config.RemoteDirectory
 		cfg.FilePatterns = s.access.config.FilePatterns
+		cfg.IncludeAll = s.access.config.IncludeAll
 		if err := s.access.save(cfg); err != nil {
 			fail(w, 500, errors.New("cannot persist access settings"))
 			return

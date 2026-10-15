@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -176,10 +177,38 @@ func (s *Server) downloadRemote(ctx context.Context, cancel context.CancelFunc, 
 	update := func(p remote.Progress) { s.mu.Lock(); s.remoteState.Progress = p; s.mu.Unlock() }
 	var manifest *remote.Manifest
 	var files []remote.PreviewFile
+	var sources []*remote.DirectSource
+	var digests []string
 	var err error
+	patterns := s.filePatterns()
+	filter := func(input []remote.PreviewFile) []remote.PreviewFile {
+		result := make([]remote.PreviewFile, 0, len(input))
+		for _, file := range input {
+			if matchesFile(path.Base(file.Path), patterns) {
+				result = append(result, file)
+			}
+		}
+		return result
+	}
+	for _, file := range selection {
+		if !matchesFile(path.Base(file.Path), patterns) {
+			err = errors.New("远程文件不符合设置中的识别格式")
+			break
+		}
+	}
+	if err != nil {
+		s.mu.Lock()
+		s.remoteState.Busy = false
+		s.remoteCancel = nil
+		s.remoteState.Error = err.Error()
+		s.remoteState.Stage = "failed"
+		s.mu.Unlock()
+		return
+	}
 	if action == "preview" {
 		var fingerprint string
 		files, fingerprint, err = remote.Preview(ctx, options, update)
+		files = filter(files)
 		options.Fingerprint = fingerprint
 	} else if action == "attach" {
 		// Revalidate metadata before registering references; never download here.
@@ -196,10 +225,27 @@ func (s *Server) downloadRemote(ctx context.Context, cancel context.CancelFunc, 
 				}
 			}
 		}
+		if err == nil {
+			for i, file := range selection {
+				source := &remote.DirectSource{Context: ctx, Options: options, File: file, CacheDir: filepath.Join(destination, strconv.Itoa(i))}
+				update(remote.Progress{Stage: "hashing", Current: file.Path, Files: i, TotalFiles: len(selection)})
+				digest, hashErr := sourceDigest(ctx, source.Open)
+				if hashErr != nil {
+					err = fmt.Errorf("内容校验失败 %q：%w", file.Path, hashErr)
+					break
+				}
+				source.Context = s.sourceContext
+				sources = append(sources, source)
+				digests = append(digests, digest)
+			}
+		}
 	} else if action == "download" {
 		manifest, err = remote.DownloadSelected(ctx, options, selection, destination, update)
 	} else {
-		manifest, err = remote.Download(ctx, options, destination, update)
+		files, _, err = remote.Preview(ctx, options, update)
+		if err == nil {
+			manifest, err = remote.DownloadSelected(ctx, options, filter(files), destination, update)
+		}
 	}
 	var saveError error
 	if err == nil {
@@ -242,19 +288,23 @@ func (s *Server) downloadRemote(ctx context.Context, cancel context.CancelFunc, 
 		if s.readers == nil {
 			s.readers = map[string]logs.SourceOpener{}
 		}
+		if s.uploadDigests == nil {
+			s.uploadDigests = map[string]string{}
+		}
 		for i, file := range selection {
 			identity, _ := json.Marshal([]any{options.Host, options.Port, options.User, options.Fingerprint, file})
 			sum := sha256.Sum256(identity)
 			uploadID := "remote-" + hex.EncodeToString(sum[:])
 			key := "sftp:" + uploadID
 			if s.readers[key] == nil {
-				source := &remote.DirectSource{Context: s.sourceContext, Options: options, File: file, CacheDir: filepath.Join(destination, strconv.Itoa(i))}
+				source := sources[i]
 				s.readers[key] = source.Open
 				s.directSources[key] = source
 			}
 			s.uploads[uploadID] = key
+			s.uploadDigests[uploadID] = digests[i]
 			s.remoteSources[key] = logs.RemoteSource{Protocol: "sftp", Host: options.Host, Port: options.Port, Path: file.Path, Modified: file.Modified, CapturedAt: time.Now().Format(time.RFC3339)}
-			s.remoteState.Downloads = append(s.remoteState.Downloads, remoteDownload{ID: uploadID, Name: path.Base(file.Path), RemotePath: file.Path})
+			s.remoteState.Downloads = append(s.remoteState.Downloads, remoteDownload{ID: uploadID, Name: path.Base(file.Path), RemotePath: file.Path, Digest: digests[i]})
 		}
 		s.remoteState.Stage = "complete"
 		return

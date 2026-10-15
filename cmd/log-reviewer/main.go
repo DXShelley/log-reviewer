@@ -250,6 +250,8 @@ func gui(args []string) error {
 	tlsFile := f.String("tls-file", filepath.Join(filepath.Dir(executable), "log-reviewer-tls.pem"), "persistent self-signed certificate and private key bundle")
 	cacheDir := f.String("cache-dir", "", "parent directory for temporary session files")
 	noBrowser := f.Bool("no-browser", false, "do not open browser")
+	showFilePicker := f.Bool("show-file-picker", true, "show GUI file selection button")
+	showPathInput := f.Bool("show-path-input", false, "show GUI path input button")
 	keep := f.Bool("keep-cache", false, "keep session index after exit")
 	ruleDir := f.String("rule-dir", defaultRules, "persistent per-language rule directory")
 	if err := f.Parse(args); err != nil {
@@ -266,6 +268,7 @@ func gui(args []string) error {
 		defer os.RemoveAll(dir)
 	}
 	s := server.New(dir)
+	s.HideFilePicker, s.ShowPathInput = !*showFilePicker, *showPathInput
 	var clientOverride []string
 	f.Visit(func(value *flag.Flag) {
 		if value.Name == "allowed-client-ips" {

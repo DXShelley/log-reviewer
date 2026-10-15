@@ -51,7 +51,7 @@
   const expectedID=activeID;if(!expectedID)return;
   try{
    const state=await remoteAPI();if(activeID!==expectedID)return;pollFailures=0;if(state.id!==activeID){lock(false);invalidate();status('远程任务已变更',true);return}
-   const stages={connecting:'连接中',listing:'扫描目录',downloading:'获取中',complete:'获取完成',failed:'获取失败'};
+   const stages={connecting:'连接中',listing:'扫描目录',hashing:'校验内容',downloading:'获取中',complete:'获取完成',failed:'获取失败'};
    status((stages[state.stage]||state.stage)+' · '+state.files+'/'+state.total_files+' 文件 · '+size(state.bytes)+' / '+size(state.total)+(state.current?'\n'+state.current:''));$('remote-progress').value=state.total?state.bytes/state.total*100:0;
    if(state.busy){timer=setTimeout(watch,350);return}lock(false);
    if(state.error){status(state.error==='context canceled'?'已取消':state.error,true);if(state.host_key&&pendingOptions){pendingHost=state.host_key;trustText.textContent=state.host_key.host+' · '+state.host_key.fingerprint+'\n请与服务器管理员或可信控制台显示的指纹核对。';trust.hidden=false}else pendingOptions=null;return}
