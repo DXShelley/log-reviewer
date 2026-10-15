@@ -23,7 +23,10 @@ try {
         if ($item.Length -gt 10MB) { throw "Binary exceeds 10 MiB: $output" }
         Write-Host "$output : $([math]::Round($item.Length / 1MB, 2)) MiB"
     }
-    Get-ChildItem dist -File | ForEach-Object { Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256 } | Format-Table -AutoSize
+    $binaries = Get-ChildItem dist -File | Where-Object { $_.Name -match '^log-reviewer-(windows|linux|darwin)-(amd64|arm64)(\.exe)?$' } | Sort-Object Name
+    $hashLines = $binaries | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower() + '  ' + $_.Name }
+    [IO.File]::WriteAllLines((Join-Path $root 'dist/SHA256SUMS.txt'), [string[]]$hashLines, [Text.UTF8Encoding]::new($false))
+    $binaries | ForEach-Object { Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256 } | Format-Table -AutoSize
 } finally {
     $env:GOOS = $oldOS
     $env:GOARCH = $oldArch
