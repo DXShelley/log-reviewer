@@ -90,12 +90,32 @@ func TestDirectSourceAndNetworkFallback(t *testing.T) {
 	if source.cached == "" {
 		t.Fatal("network failure did not create fallback")
 	}
+	server.Close()
+	cachePath := source.cached
+	details, _, err = logs.Details(report, logs.Filter{Source: -1, Keyword: "failed"}, 0, 10)
+	if err != nil || len(details) != 1 || details[0].Text != string(content) {
+		t.Fatalf("cached detail unavailable after disconnect: %v %v", details, err)
+	}
+	var timeExport bytes.Buffer
+	if err = logs.ExportTime(context.Background(), report, 0, "2026-10-15 12:30:00", "2026-10-15 12:30:00", &timeExport); err != nil || !bytes.Equal(timeExport.Bytes(), content) {
+		t.Fatalf("cached time export: %q %v", timeExport.String(), err)
+	}
+	if source.cached != cachePath {
+		t.Fatal("cached source was downloaded again")
+	}
 	if _, err = logs.Analyze([]string{key}, t.TempDir(), logs.Options{Readers: map[string]logs.SourceOpener{key: source.Open}}); err != nil {
 		t.Fatal(err)
 	}
 	encoded, _ := json.Marshal(report)
 	if strings.Contains(string(encoded), options.Password) {
 		t.Fatal("credentials serialized")
+	}
+	var restored logs.Report
+	if err = json.Unmarshal(encoded, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = logs.Details(&restored, logs.Filter{Source: -1}, 0, 10); err == nil || !strings.Contains(err.Error(), "reconnect") {
+		t.Fatalf("restored remote report must require reconnection: %v", err)
 	}
 	after, _ := os.Stat(sourcePath)
 	got, _ := os.ReadFile(sourcePath)

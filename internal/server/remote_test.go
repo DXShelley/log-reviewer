@@ -25,6 +25,7 @@ func TestRemoteAPIAnalysisAndProvenance(t *testing.T) {
 	}
 	defer fixture.Close()
 	s := New(t.TempDir())
+	s.remoteDir = filepath.Join(t.TempDir(), "remote")
 	defer s.Close()
 	handler := s.Handler("127.0.0.1:8765")
 	call := func(method, body string) *httptest.ResponseRecorder {
@@ -100,6 +101,7 @@ func TestRemoteAPICancel(t *testing.T) {
 	host, port, _ := net.SplitHostPort(listener.Addr().String())
 	number, _ := strconv.Atoi(port)
 	s := New(t.TempDir())
+	s.remoteDir = filepath.Join(t.TempDir(), "remote")
 	defer s.Close()
 	handler := s.Handler("127.0.0.1:8765")
 	call := func(method, body string) *httptest.ResponseRecorder {
@@ -147,6 +149,7 @@ func TestRemotePreviewSelectionAndHistory(t *testing.T) {
 	}
 	defer fixture.Close()
 	s := New(t.TempDir())
+	s.remoteDir = filepath.Join(t.TempDir(), "remote")
 	defer s.Close()
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := s.ConfigureAccess(statePath, nil); err != nil {
@@ -183,7 +186,7 @@ func TestRemotePreviewSelectionAndHistory(t *testing.T) {
 	if preview.Error != "" || preview.Stage != "preview" || len(preview.Files) != 2 || len(s.uploads) != 0 {
 		t.Fatalf("%+v", preview)
 	}
-	if entries, _ := os.ReadDir(filepath.Join(s.dir, "remote")); len(entries) != 0 {
+	if entries, _ := os.ReadDir(s.remoteDir); len(entries) != 0 {
 		t.Fatal("preview downloaded files")
 	}
 	for _, paths := range [][]string{{}, {"app.log", "worker.log"}, {"../outside.log"}, {"app.log", "app.log"}} {
@@ -238,6 +241,7 @@ func TestRemotePreviewSelectionAndHistory(t *testing.T) {
 
 func TestRemoteRejectsTrailingJSON(t *testing.T) {
 	s := New(t.TempDir())
+	s.remoteDir = filepath.Join(t.TempDir(), "remote")
 	defer s.Close()
 	r := httptest.NewRequest("POST", "/api/remote-fetch", strings.NewReader(`{} {}`))
 	w := httptest.NewRecorder()

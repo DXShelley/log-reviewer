@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"log-reviewer/internal/logs"
+	"log-reviewer/internal/remote"
 )
 
 //go:embed web/*
@@ -30,6 +31,9 @@ type Server struct {
 	access           accessPolicy
 	rules            *logs.RuleStore
 	mu               sync.RWMutex
+	storageMu        sync.RWMutex
+	remoteDir        string
+	directSources    map[string]*remote.DirectSource
 	pickerMu         sync.Mutex
 	jobs             sync.WaitGroup
 	Report           *logs.Report
@@ -56,7 +60,10 @@ func New(dir string) *Server {
 		panic(err)
 	}
 	sourceContext, sourceCancel := context.WithCancel(context.Background())
-	return &Server{dir: dir, token: hex.EncodeToString(b), uploads: map[string]string{}, remoteSources: map[string]logs.RemoteSource{}, rules: &logs.RuleStore{Dir: filepath.Join(dir, "rules")}, sourceContext: sourceContext, sourceCancel: sourceCancel}
+	s := &Server{dir: dir, token: hex.EncodeToString(b), uploads: map[string]string{}, remoteSources: map[string]logs.RemoteSource{}, rules: &logs.RuleStore{Dir: filepath.Join(dir, "rules")}, sourceContext: sourceContext, sourceCancel: sourceCancel, directSources: map[string]*remote.DirectSource{}}
+	s.remoteDir = s.sessionRemoteDirectory(defaultRemoteDirectory())
+	s.access.config.AllowedClientIPs = []string{}
+	return s
 }
 func (s *Server) Token() string { return s.token }
 func (s *Server) Handler(addr string) http.Handler {
@@ -79,6 +86,7 @@ func (s *Server) Handler(addr string) http.Handler {
 	m.HandleFunc("/api/language-rules", s.languageRules)
 	m.HandleFunc("/api/remote-fetch", s.remoteFetch)
 	m.HandleFunc("/api/remote-hosts", s.remoteHosts)
+	m.HandleFunc("/api/import-settings", s.importSettings)
 	m.HandleFunc("/api/time-export", s.timeExport)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -107,6 +115,10 @@ func (s *Server) Handler(addr string) http.Handler {
 				return
 			}
 			w.Header().Set("Cache-Control", "no-store")
+		}
+		if r.URL.Path != "/api/import-settings" || r.Method != http.MethodPut {
+			s.storageMu.RLock()
+			defer s.storageMu.RUnlock()
 		}
 		m.ServeHTTP(w, r)
 	})
@@ -303,10 +315,12 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.RUnlock()
 	if len(req.Paths) > 0 {
-		if _, err := logs.ExpandPaths(req.Paths); err != nil {
+		resolved, err := s.expandImportPaths(req.Paths)
+		if err != nil {
 			fail(w, 400, err)
 			return
 		}
+		req.Paths = resolved
 	}
 	req.Paths = append(req.Paths, direct...)
 	if _, err := logs.NewParser(req.Rules); err != nil {

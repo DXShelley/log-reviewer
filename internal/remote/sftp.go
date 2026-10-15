@@ -150,7 +150,7 @@ func (o *Options) Validate() error {
 		o.MaxBytes = 10 << 30
 	}
 	if strings.TrimSpace(o.Pattern) == "" {
-		o.Pattern = "*.log,*.log.*,*.txt"
+		o.Pattern = "*.log,*.log.*,*.txt,*.text,*.out,*.err,*.trace"
 	}
 	if strings.TrimSpace(o.Host) == "" || strings.ContainsAny(o.Host, "/\\\r\n") || o.Port < 1 || o.Port > 65535 || strings.TrimSpace(o.User) == "" || strings.TrimSpace(o.Path) == "" {
 		return errors.New("host, user and remote path are required; port must be 1-65535")
@@ -578,7 +578,10 @@ func transferFiles(ctx context.Context, client remoteFS, options Options, select
 		if changed {
 			manifest.Warnings = append(manifest.Warnings, "Remote file changed during download: "+item.path)
 		}
-		finalPath := strings.TrimSuffix(local.Name(), ".part") + ".log"
+		finalPath, err := downloadFilename(destination, path.Base(item.path))
+		if err != nil {
+			return nil, err
+		}
 		if err := os.Rename(local.Name(), finalPath); err != nil {
 			return nil, err
 		}

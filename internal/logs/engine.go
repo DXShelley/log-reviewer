@@ -117,7 +117,18 @@ func stamp(n int64) string {
 	}
 	return time.Unix(0, n).Format(time.RFC3339Nano)
 }
-func ExpandPaths(args []string) ([]string, error) {
+func ExpandPaths(args []string, patterns ...string) ([]string, error) {
+	if len(patterns) == 0 {
+		patterns = []string{"*.log", "*.log.*", "*.txt", "*.text", "*.out", "*.err", "*.trace"}
+	}
+	matches := func(name string) bool {
+		for _, pattern := range patterns {
+			if ok, _ := filepath.Match(strings.ToLower(pattern), strings.ToLower(name)); ok {
+				return true
+			}
+		}
+		return false
+	}
 	seen := map[string]bool{}
 	var paths []string
 	add := func(p string) error {
@@ -159,7 +170,7 @@ func ExpandPaths(args []string) ([]string, error) {
 				return nil, err
 			}
 			for _, e := range entries {
-				if !e.IsDir() && (strings.HasSuffix(strings.ToLower(e.Name()), ".log") || strings.HasSuffix(strings.ToLower(e.Name()), ".txt") || strings.Contains(strings.ToLower(e.Name()), ".log.")) {
+				if !e.IsDir() && matches(e.Name()) {
 					if err := add(filepath.Join(p, e.Name())); err != nil {
 						return nil, err
 					}

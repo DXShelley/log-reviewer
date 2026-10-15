@@ -9,6 +9,8 @@ import (
 	"log-reviewer/internal/logs"
 	"net"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -21,6 +23,23 @@ type DirectSource struct {
 	CacheDir string
 	mu       sync.Mutex
 	cached   string
+}
+
+// RelocateCache updates private cache paths after the server moves its files.
+func (s *DirectSource) RelocateCache(oldRoot, newRoot string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	move := func(p string) string {
+		rel, err := filepath.Rel(oldRoot, p)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return p
+		}
+		return filepath.Join(newRoot, rel)
+	}
+	s.CacheDir = move(s.CacheDir)
+	if s.cached != "" {
+		s.cached = move(s.cached)
+	}
 }
 
 func (s *DirectSource) context() context.Context {

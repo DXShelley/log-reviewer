@@ -15,6 +15,8 @@ import (
 )
 
 type accessConfig struct {
+	RemoteDirectory  string       `json:"remote_directory,omitempty"`
+	FilePatterns     []string     `json:"file_patterns,omitempty"`
 	AllowedClientIPs []string     `json:"allowed_client_ips"`
 	RemoteHosts      []remoteHost `json:"remote_hosts,omitempty"`
 }
@@ -99,6 +101,11 @@ func (s *Server) ConfigureAccess(path string, override []string) error {
 		}
 	}
 	p.config, p.prefixes = cfg, prefixes
+	base := cfg.RemoteDirectory
+	if base == "" {
+		base = defaultRemoteDirectory()
+	}
+	s.remoteDir = s.sessionRemoteDirectory(base)
 	return nil
 }
 
@@ -167,6 +174,8 @@ func (s *Server) accessSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cfg.RemoteHosts = s.access.config.RemoteHosts
+		cfg.RemoteDirectory = s.access.config.RemoteDirectory
+		cfg.FilePatterns = s.access.config.FilePatterns
 		if err := s.access.save(cfg); err != nil {
 			fail(w, 500, errors.New("cannot persist access settings"))
 			return

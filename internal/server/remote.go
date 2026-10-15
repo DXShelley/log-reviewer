@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"log-reviewer/internal/logs"
@@ -96,6 +97,9 @@ func (s *Server) remoteFetch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		options := request.Options
+		if options.Pattern == "" && request.Action != "download" && request.Action != "attach" {
+			options.Pattern = strings.Join(s.filePatterns(), "\n")
+		}
 		if request.Action != "download" && request.Action != "attach" {
 			if err := options.Validate(); err != nil {
 				fail(w, 400, err)
@@ -168,7 +172,7 @@ func (s *Server) remoteFetch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) downloadRemote(ctx context.Context, cancel context.CancelFunc, id string, options remote.Options, action string, selection []remote.PreviewFile) {
 	defer s.jobs.Done()
 	defer cancel()
-	destination := filepath.Join(s.dir, "remote", id)
+	destination := filepath.Join(s.remoteDir, id)
 	update := func(p remote.Progress) { s.mu.Lock(); s.remoteState.Progress = p; s.mu.Unlock() }
 	var manifest *remote.Manifest
 	var files []remote.PreviewFile
@@ -243,8 +247,11 @@ func (s *Server) downloadRemote(ctx context.Context, cancel context.CancelFunc, 
 			sum := sha256.Sum256(identity)
 			uploadID := "remote-" + hex.EncodeToString(sum[:])
 			key := "sftp:" + uploadID
-			source := &remote.DirectSource{Context: s.sourceContext, Options: options, File: file, CacheDir: filepath.Join(destination, strconv.Itoa(i))}
-			s.readers[key] = source.Open
+			if s.readers[key] == nil {
+				source := &remote.DirectSource{Context: s.sourceContext, Options: options, File: file, CacheDir: filepath.Join(destination, strconv.Itoa(i))}
+				s.readers[key] = source.Open
+				s.directSources[key] = source
+			}
 			s.uploads[uploadID] = key
 			s.remoteSources[key] = logs.RemoteSource{Protocol: "sftp", Host: options.Host, Port: options.Port, Path: file.Path, Modified: file.Modified, CapturedAt: time.Now().Format(time.RFC3339)}
 			s.remoteState.Downloads = append(s.remoteState.Downloads, remoteDownload{ID: uploadID, Name: path.Base(file.Path), RemotePath: file.Path})
@@ -261,7 +268,7 @@ func (s *Server) downloadRemote(ctx context.Context, cancel context.CancelFunc, 
 		uploadID := id + "-" + strconv.Itoa(i)
 		uploadID = s.registerImport(uploadID, file.LocalPath, digest)
 		if s.uploads[uploadID] != file.LocalPath {
-			s.remoteState.Downloads = append(s.remoteState.Downloads, remoteDownload{ID: uploadID, Name: filepath.Base(s.uploads[uploadID]), RemotePath: file.RemotePath, Digest: digest})
+			s.remoteState.Downloads = append(s.remoteState.Downloads, remoteDownload{ID: uploadID, Name: path.Base(file.RemotePath), RemotePath: file.RemotePath, Digest: digest})
 			continue
 		}
 		s.remoteSources[file.LocalPath] = logs.RemoteSource{Protocol: "sftp", Host: manifest.Host, Port: manifest.Port, Path: file.RemotePath, CapturedAt: manifest.CapturedAt, Changed: file.Changed, Modified: file.Modified}

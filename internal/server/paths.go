@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-
-	"log-reviewer/internal/logs"
 )
 
 func (s *Server) localPaths(w http.ResponseWriter, r *http.Request) {
@@ -45,9 +43,9 @@ func (s *Server) localPaths(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, errors.New("请填写 1–1000 条文件、目录或通配符路径，每行一条"))
 			return
 		}
-		paths, err := logs.ExpandPaths(request.Paths)
+		paths, err := s.expandImportPaths(request.Paths)
 		if err != nil {
-			fail(w, 400, fmt.Errorf("路径解析失败（主机 %s；工作目录 %s）：%w；目录仅匹配当前层的 .log、.txt、.log.* 文件，不递归子目录", host, cwd, err))
+			fail(w, 400, fmt.Errorf("路径解析失败（主机 %s；工作目录 %s）：%w；目录按文件设置识别当前层文件，不递归子目录", host, cwd, err))
 			return
 		}
 		result["paths"] = paths

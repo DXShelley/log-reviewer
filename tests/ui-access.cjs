@@ -10,7 +10,7 @@ async function main(){
  let child,browser,context;
  async function stop(){if(child){const current=child;child=null;if(current.exitCode!==null||current.signalCode!==null)return;await new Promise(resolve=>{current.once('exit',resolve);current.kill()})}}
  async function start(extra=[]){
-  child=spawn(binary,['gui','--host','127.0.0.1','--port','0','--no-browser','--state-file',state,'--rule-dir',rules,...extra],{windowsHide:true});
+  child=spawn(binary,['gui','--host','127.0.0.1','--port','0','--https-port','0','--tls-file',path.join(dir,'tls.pem'),'--no-browser','--state-file',state,'--rule-dir',rules,...extra],{windowsHide:true});
   child.stderr.on('data',b=>process.stderr.write(b));
   return new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('startup timeout')),10000);child.on('error',reject);child.on('exit',code=>{clearTimeout(timer);reject(Error('startup exit '+code+' '+output))});child.stdout.on('data',b=>{output+=b;const match=output.match(/HTTP: (http:\/\/\S+)/);if(match){clearTimeout(timer);resolve(match[1])}})});
  }

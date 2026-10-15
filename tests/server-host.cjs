@@ -3,9 +3,9 @@ const {chromium}=require('playwright');
 const net=require('net'),http=require('http'),os=require('os'),path=require('path'),fs=require('fs'),assert=require('assert');
 async function request(url,token,origin){return new Promise((resolve,reject)=>{const req=http.get(url,{headers:{...(token?{Authorization:'Bearer '+token}:{}),...(origin?{Origin:origin}:{})},timeout:5000},res=>{res.resume();res.on('end',()=>resolve(res.statusCode))});req.on('error',reject);req.on('timeout',()=>req.destroy(Error('timeout')))})}
 async function main(){
- const root=path.resolve(__dirname,'..'),hold=net.createServer();
+ const root=path.resolve(__dirname,'..'),hold=net.createServer(),dir=fs.mkdtempSync(path.join(os.tmpdir(),'lr-host-'));
  await new Promise(resolve=>hold.listen(0,'0.0.0.0',resolve));const occupied=hold.address().port;
- const child=spawn(path.join(root,'dist/log-reviewer-windows-amd64.exe'),['gui','--no-browser','--port',String(occupied),'--rule-dir',fs.mkdtempSync(path.join(os.tmpdir(),'lr-host-rules-'))],{windowsHide:true});
+ const child=spawn(process.env.LR_TEST_BINARY||path.join(root,'dist/log-reviewer-windows-amd64.exe'),['gui','--no-browser','--port',String(occupied),'--https-port','0','--state-file',path.join(dir,'state.json'),'--tls-file',path.join(dir,'tls.pem'),'--rule-dir',path.join(dir,'rules')],{windowsHide:true});
  let output='',stderr='',browser,context;
  child.stderr.on('data',b=>stderr+=b);
  try {

@@ -22,6 +22,15 @@ body>header{height:auto;min-height:60px;padding-block:10px}
 .header-right .time-export-actions select,.header-right .time-export-actions button{min-height:32px;height:32px;font-size:12px}
 .section-label h1,.section-label h2{font-size:13px;line-height:1.4}
 .files-band,.filter-band{padding-block:16px;border-bottom:1px solid var(--section-line)}
+#files.file-list{display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px;width:100%;min-width:0;max-width:100%;height:auto;max-height:none;overflow:visible}
+#files .file-chip{flex:0 0 auto;min-width:0;max-width:100%}
+#files .file-chip span{min-width:0;max-width:min(290px,calc(100vw - 100px))}
+#files .file-chip button{flex-shrink:0}
+.file-settings-body{display:grid;grid-template-columns:minmax(0,1fr);gap:9px;padding:18px}
+.file-settings-body label{font-size:12px;color:var(--muted)}
+.file-settings-body input,.file-settings-body textarea{width:100%;margin:0;min-width:0}
+#file-settings-status{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--muted)}
+#file-settings-status:empty{display:none}
 .stats{padding-block:14px;border-bottom:1px solid var(--section-line);font-variant-numeric:tabular-nums}
 .filters{grid-template-columns:minmax(190px,1.5fr) repeat(4,minmax(110px,1fr)) auto 32px;gap:10px}
 .filters label{font-size:12px;color:#566b62}

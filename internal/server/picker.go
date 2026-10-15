@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
-	"log-reviewer/internal/logs"
 	"net"
 	"net/http"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -58,6 +58,9 @@ func (s *Server) pickPaths(w http.ResponseWriter, r *http.Request) {
 	defer s.pickerMu.Unlock()
 	kind := r.URL.Query().Get("kind")
 	script := "Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Multiselect=$true; $d.Title='选择日志文件（只读分析）'; if($d.ShowDialog() -eq 'OK'){ConvertTo-Json -Compress -InputObject @($d.FileNames)}else{'[]'}"
+	filter := strings.ReplaceAll(strings.Join(s.filePatterns(), ";"), "'", "''")
+	filter = strings.ReplaceAll(filter, "|", "")
+	script = strings.Replace(script, "$d.Multiselect=$true;", "$d.Multiselect=$true; $d.Filter='日志文件|"+filter+"|所有文件|*.*';", 1)
 	if kind == "directory" {
 		script = "Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='选择日志目录（只读，当前层）'; $d.ShowNewFolderButton=$false; if($d.ShowDialog() -eq 'OK'){ConvertTo-Json -Compress -InputObject @($d.SelectedPath)}else{'[]'}"
 	} else if kind != "files" {
@@ -87,7 +90,7 @@ func (s *Server) pickPaths(w http.ResponseWriter, r *http.Request) {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if entry.Type().IsRegular() {
+			if entry.Type().IsRegular() && matchesFile(entry.Name(), s.filePatterns()) {
 				if len(paths) >= 10000 {
 					return errors.New("目录超过 10000 个文件，请使用输入路径限定范围")
 				}
@@ -101,7 +104,7 @@ func (s *Server) pickPaths(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(paths) > 0 {
-		paths, err = logs.ExpandPaths(paths)
+		paths, err = s.expandImportPaths(paths)
 		if err != nil {
 			fail(w, 400, err)
 			return

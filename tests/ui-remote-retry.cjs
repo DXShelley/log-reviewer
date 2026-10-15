@@ -3,7 +3,8 @@ const fs=require('fs'),path=require('path'),assert=require('assert');
 
 async function main(){
  const root=path.resolve(__dirname,'..');
- const url=process.env.LR_TEST_URL||fs.readFileSync(path.join(root,'.work/gui.out'),'utf8').match(/GUI: (http:\/\/\S+)/)[1];
+ const url=process.env.LR_TEST_URL||fs.readFileSync(path.join(root,'.work/gui.out'),'utf8').match(/HTTP: (http:\/\/\S+)/)?.[1];
+ if(!url)throw Error('HTTP compatibility URL not found; provide LR_TEST_URL for a running server');
  const browser=await chromium.connectOverCDP('http://127.0.0.1:9222',{timeout:5000});
  const context=await browser.newContext();
  try{

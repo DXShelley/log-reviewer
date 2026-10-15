@@ -18,7 +18,8 @@
 - 六种布局选择位于右上角，按来源、筛选/导出、结果与内容分组；折叠摘要按需读取。离线 Highlight.js 着色、Lucide 图标、换行与全屏/弹框回退。
 - GUI 默认自动上下文，总体前 20、后 100 行是扫描上限，范围 0–10000；修改总体设置后自动生效并清除单条覆盖。单条事件仍可独立查询。总体设置与布局保存在浏览器，单条覆盖仅保留在当前页面会话。分析和导出期间显示遮罩。
 - 原始时间片段导出：GUI 合并文本或分文件 ZIP，CLI `export-time`；包含分析时未收集的 INFO 和时间续行，支持多节点同一时间窗口比较。
-- 服务器无 GUI 时运行 `gui --no-browser`，默认监听 `0.0.0.0:8765` 并尝试 IPv6；端口占用时自动选空闲端口，输出最终访问地址。
+- 服务器无 GUI 时运行 `gui --no-browser`，默认 HTTPS `0.0.0.0:8766`、兼容 HTTP `0.0.0.0:8765`，并尝试 IPv6；端口占用时自动选空闲端口。`GUI:` 输出 HTTPS，`HTTP:` 输出旧入口；`--http=false` 可关闭明文入口。
+- 支持持久化自签名证书和指定证书/密钥，TLS 最低版本 1.2；单 IP/CIDR 白名单可通过 CLI 或 GUI 配置并持久化，API 始终要求本次会话 token。
 - 内置 SFTP 获取文件/目录，支持密码/私钥、过滤、递归、限额、进度、取消、获取后分析和来源追踪。SSH 默认端口 22，指定 `.ssh` 目录自动读取 `known_hosts`。
 - CLI JSON、分析报告和带 token 的 HTTP API 可供 agent 读取分类、样本、堆栈和时间窗口证据。
 
@@ -59,6 +60,8 @@ node tests/gui-smoke.cjs
 node tests/ui-filters.cjs
 node tests/ui-rules.cjs
 node tests/server-host.cjs
+node tests/ui-https.cjs
+node tests/ui-access.cjs
 go build -o .work/sftp-fixture.exe ./tests/sftp-fixture
 node tests/ui-sftp.cjs
 ```

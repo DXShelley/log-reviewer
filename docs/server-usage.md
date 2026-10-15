@@ -7,7 +7,7 @@
 ```bash
 chmod +x ./log-reviewer-linux-amd64
 ./log-reviewer-linux-amd64 gui --no-browser /var/log/myapp/app.log
-# 等价于 --host 0.0.0.0 --port 8765
+# 默认 --host 0.0.0.0 --https-port 8766 --port 8765
 ```
 
 Windows：
@@ -72,7 +72,7 @@ GUI 顶部“访问控制”可配置并保存，保存成功立即应用到全�
 ```bash
 ./log-reviewer-linux-amd64 gui --host 127.0.0.1 --port 8765 --no-browser
 # 在客户端运行：
-ssh -N -L 8765:127.0.0.1:<服务器最终端口> user@server
+ssh -N -L 8765:127.0.0.1:<服务器HTTP最终端口> user@server
 # 客户端打开 http://127.0.0.1:8765/#<服务器token>
 ```
 
@@ -84,13 +84,15 @@ ssh -N -L 8765:127.0.0.1:<服务器最终端口> user@server
 ./log-reviewer-linux-amd64 gui --host 127.0.0.1 --no-browser --allowed-hosts logs.example.com
 ```
 
-代理转发到最终输出的监听端口，保留原始 Host（含非默认端口）、Authorization 和 Origin。允许同源 HTTP/HTTPS Origin，拒绝跨站 Origin；不使用转发头自动绕过校验。支持多个白名单域名，以逗号分隔，不含协议、路径或端口。代理部署于站点根路径，当前不支持路径前缀。
+代理可转发到 HTTP 兼容端口，或校验证书后转发到 HTTPS 端口；根据启动输出选择上游协议与最终端口。保留原始 Host（含非默认端口）、Authorization 和 Origin。允许同源 HTTP/HTTPS Origin，拒绝跨站 Origin；不使用转发头自动绕过校验。支持多个白名单域名，以逗号分隔，不含协议、路径或端口。代理部署于站点根路径，当前不支持路径前缀。
 
 远程访问失败依次检查：输出的最终端口、服务器监听、主机防火墙、云安全组、容器端口映射、路由/NAT、域名白名单及 token。动态端口可能与预先配置的容器映射或代理上游不一致；这类部署应确保期望端口空闲，并核实启动输出。IPv6 需单独确认路由和防火墙。
 
 HTTP 非本机页面可能无法使用剪贴板 API 或浏览器流式保存文件：复制会弹出文本框供手动复制；大分类优先用 CLI export，或通过 HTTPS 访问。代理上传限制及超时需覆盖日志大小；不要把 10 GiB 日志经默认小上传限制代理上传。
 
 ## 优化建议
+
+测试矩阵、运行命令和人工验收见 [HTTPS 与访问控制测试](security-testing.md)。
 
 当前版本适合可信人员共享一个分析会话；不同浏览器共用分析结果和规则，重新分析会替换当前结果。
 

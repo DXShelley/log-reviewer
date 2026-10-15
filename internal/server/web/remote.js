@@ -41,7 +41,7 @@
  function toggleAuth(){const key=$('remote-auth').value==='key';$('remote-password-label').hidden=key;$('remote-key-fields').hidden=!key;$('remote-password').required=!key;$('remote-private-key').required=key}
  function lock(value){for(const field of fields)$('remote-'+field).disabled=value;history.disabled=value;$('remote-submit').disabled=value;downloadButton.disabled=value||!previewID;$('remote-cancel').hidden=!value;$('remote-progress').hidden=!value;importing=value;setBusy(busy);$('remote-button').disabled=busy;for(const button of actions.querySelectorAll('button,input'))button.disabled=value}
  function status(text,isError=false){$('remote-status').textContent=text;$('remote-status').classList.toggle('dialog-error',isError)}
- $('remote-button').onclick=()=>{restorePassword();$('remote-dialog').showModal();loadHosts()};
+ $('remote-button').onclick=async()=>{try{await ensureFileSettings();restorePassword();$('remote-dialog').showModal();loadHosts()}catch(e){error(e)}};
  $('close-remote').onclick=()=>{$('remote-dialog').close()};
  $('remote-dialog').addEventListener('close',()=>{sessionVersion++;clearTimeout(timer);activeID='';invalidate();clearCredentials();lock(false);releaseRequest=requestPromise.catch(()=>{}).then(()=>remoteAPI({method:'DELETE'})).catch(e=>error(Error('远程会话清理失败：'+e.message)))});
  $('remote-auth').onchange=toggleAuth;
