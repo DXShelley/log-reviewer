@@ -20,7 +20,7 @@ import (
 	"log-reviewer/internal/server"
 )
 
-const version = "0.7.1"
+const version = "1.0.0"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -65,7 +65,7 @@ func run(args []string) error {
 	}
 }
 
-const help = `Log Reviewer 0.7.1 - local, streaming log classification
+const help = `Log Reviewer 1.0.0 - local, streaming log classification
 
   log-reviewer                              Open local GUI
   log-reviewer gui [--host 0.0.0.0] [--port 8765] [--no-browser] [files...]
