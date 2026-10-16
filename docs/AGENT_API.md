@@ -56,6 +56,7 @@ log-reviewer serve --no-browser --port 8765 --keep-cache
 | `PUT /api/import-settings` | JSON `{remote_directory: "绝对路径", file_patterns: ["*.log", "*.txt", "*.text"]}`；持久保存并迁移当前会话远程文件，更新分析与缓存引用；分析或获取中返回 409，迁移失败保留原文件与配置 |
 | `POST /api/upload?name=...` | body 为原始文件，返回 upload id；analyze 的 uploads 可引用该 ID |
 | `GET /api/paths` | 返回工具所在主机 hostname、系统 os、相对路径基准 working_directory；需要会话认证 |
+| `GET /api/browse?path=...` | 浏览部署账户有权限读取的目录；path 省略时使用启动目录。返回绝对 path、parent、roots 和 entries（name、path、directory、size）；列出子目录及符合文件识别格式的普通文件。使用与 paths 相同的会话鉴权，不上传文件 |
 | `POST /api/paths` | body 为 `{"paths":["C:\\logs\\*.log"],"identify":true}`；校验并展开 1–1000 条本机路径，返回路径去重后的 paths 与主机上下文；可选 identify 默认为 false，启用后流式读取并返回 imports（path、name、digest、可选 remote_path），不复制也不分析 |
 | `POST /api/pick-paths?kind=files` | Windows 本机访问打开系统多文件选择器；`kind=directory` 选择目录，返回只读源路径，不复制文件；需要认证，远程访问拒绝 |
 | `POST /api/remote-fetch` | SFTP 连接与选择配置，返回任务 id，异步获取 |
