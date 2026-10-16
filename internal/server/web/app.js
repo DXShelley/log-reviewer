@@ -6,6 +6,7 @@ let files=[],uploads=[],report=null,groups=[],selected=null,level='',page=0,more
 let queryVersion=0,detailVersion=0,toastTimer,categoryPage=0;
 const PAGE=10;
 let importing=false;
+let importSource='upload';
 const sourceDisplayPaths=new Map();
 const pathImports=new Map();
 const importName=p=>pathImports.get(p)?.name||basename(sourceDisplayPaths.get(p)||p);
@@ -84,16 +85,46 @@ async function acceptIdentifiedImport(item){
  if(item.path){pathImports.set(item.path,item);if(!files.includes(item.path))files.push(item.path)}else uploads.push(item);renderFiles();return true;
  }
 async function uploadList(list){if(importing||busy)return false;const items=Array.from(list);if(!items.length)return false;clearError();importing=true;setBusy(busy);let added=0;try{await ensureFileSettings();for(const f of items){if(!matchesImportFormat(f.name))continue;$('footer-status').textContent='导入 '+f.name+'…';const u=await json('upload?name='+encodeURIComponent(f.name),{method:'POST',body:f});if(await acceptImport(u))added++} $('footer-status').textContent=added+' 个文件已导入，'+(items.length-added)+' 个文件已跳过';return true}catch(e){error(e);return false}finally{importing=false;$('upload').value='';setBusy(busy)}}
+async function openDeploymentBrowser(kind){
+ const dialog=node('dialog');dialog.id='deployment-browser';dialog.setAttribute('aria-label','选择部署机器文件');
+ const header=node('div',undefined,'dialog-header'),close=logIcon('X','关闭文件浏览器',()=>dialog.close());header.append(node('h2','选择部署机器文件'),close);
+ const navigation=node('form',undefined,'picker-nav'),up=logIcon('ArrowLeft','上一级'),location=node('input'),go=node('button','打开');
+ location.setAttribute('aria-label','部署机器目录');go.type='submit';up.type='button';navigation.append(up,location,go);
+ const roots=node('select');roots.setAttribute('aria-label','部署机器磁盘');navigation.prepend(roots);
+ const list=node('div',undefined,'picker-list'),message=node('p');message.setAttribute('role','status');
+ const footer=node('div',undefined,'dialog-footer'),confirm=node('button',kind==='directory'?'选择当前目录':'导入选中文件');confirm.className='primary';confirm.disabled=true;footer.append(message,confirm);
+ dialog.append(header,navigation,list,footer);document.body.append(dialog);dialog.onclose=()=>dialog.remove();dialog.showModal();
+ let directory='',parent='',version=0,selected=new Set();
+ async function load(requested){
+  const current=++version;confirm.disabled=true;location.disabled=true;up.disabled=true;roots.disabled=true;go.disabled=true;selected.clear();list.replaceChildren();message.textContent='正在读取目录…';
+  try{const data=await json('browse?path='+encodeURIComponent(requested),{signal:AbortSignal.timeout(30000)});if(current!==version||!dialog.open)return;
+   directory=data.path;parent=data.parent;location.value=directory;up.disabled=parent===directory;selected=new Set();list.replaceChildren();
+   roots.replaceChildren(new Option('磁盘 / 根目录',''));for(const root of data.roots)roots.add(new Option(root,root));
+   for(const entry of data.entries){const row=node('div',undefined,'picker-entry');
+    if(entry.directory){const button=node('button');button.append(LogIcons.createElement(LogIcons.FolderOpen),node('span',entry.name));button.onclick=()=>load(entry.path);row.append(button)}
+    else if(kind==='files'){const label=node('label'),check=node('input');check.type='checkbox';check.onchange=()=>{if(check.checked)selected.add(entry.path);else selected.delete(entry.path);confirm.disabled=!selected.size;message.textContent=selected.size+' 个文件已选择'};label.append(check,node('span',entry.name));row.append(label,node('span',size(entry.size),'size'))}
+    else continue;list.append(row);
+   }
+   message.textContent=list.children.length?'':'此目录没有可选项目';confirm.disabled=kind!=='directory';
+  }catch(e){if(current===version){message.textContent=e.message;confirm.disabled=true}}
+  finally{if(current===version){location.disabled=false;roots.disabled=false;go.disabled=false;up.disabled=!directory||parent===directory}}
+ }
+ navigation.onsubmit=e=>{e.preventDefault();load(location.value.trim())};up.onclick=()=>load(parent);roots.onchange=()=>{if(roots.value)load(roots.value)};
+ confirm.onclick=async()=>{if(busy||importing)return;importing=true;setBusy(busy);confirm.disabled=true;close.disabled=true;
+  try{const added=await acceptPaths(kind==='directory'?[directory]:[...selected]);dialog.close();toast('已导入 '+added+' 个文件，其余重复内容已跳过')}catch(e){message.textContent=e.message}finally{importing=false;setBusy(busy);confirm.disabled=false;close.disabled=false}
+ };
+ dialog.oncancel=e=>{if(importing)e.preventDefault()};await load('');
+}
 async function chooseImport(kind){
  $('import-dialog').close();if(busy||importing)return;
+ if(importSource==='upload'){$(kind==='files'?'upload':'upload-directory').click();return}
  try{await ensureFileSettings();const context=await json('paths',{signal:AbortSignal.timeout(30000)});
   if(context.native_picker){importing=true;setBusy(busy);$('footer-status').textContent='请在本机系统窗口中选择日志';const result=await json('pick-paths?kind='+kind,{method:'POST'});const added=await acceptPaths(result.paths||[]);$('footer-status').textContent='已导入 '+added+' 个文件，跳过 '+((result.paths||[]).length-added)+' 个文件';return}
-  if(context.local_access&&fileSettings?.show_path_input){$('paths-panel').hidden=false;$('paths').focus();toast('请填写本机文件或目录路径，直接只读分析');return}
-  $(kind==='files'?'upload':'upload-directory').click();
+  await openDeploymentBrowser(kind);
  }catch(e){error(e)}finally{importing=false;setBusy(busy)}
 }
-$('upload-button').onclick=()=>$('import-dialog').showModal();$('import-files').onclick=()=>chooseImport('files');$('import-directory').onclick=()=>chooseImport('directory');$('close-import').onclick=()=>$('import-dialog').close();$('upload-directory').onchange=async()=>{try{await ensureFileSettings();await uploadList(Array.from($('upload-directory').files).filter(f=>matchesImportFormat(f.name)))}catch(e){error(e)}finally{$('upload-directory').value=''}};$('upload').onchange=()=>uploadList($('upload').files);
-document.addEventListener('dragover',e=>{e.preventDefault()});document.addEventListener('drop',async e=>{e.preventDefault();if(busy||importing||!e.dataTransfer.files.length)return;const dropped=Array.from(e.dataTransfer.files);try{const context=await json('paths',{signal:AbortSignal.timeout(30000)});if(context.local_access){toast('浏览器不提供真实路径，请选择源文件或输入本机路径');await chooseImport('files')}else await uploadList(dropped)}catch(err){error(err)}});
+$('upload-button').onclick=()=>{importSource='upload';$('import-dialog').querySelector('h2').textContent='上传本机文件';$('import-dialog').showModal()};$('import-files').onclick=()=>chooseImport('files');$('import-directory').onclick=()=>chooseImport('directory');$('close-import').onclick=()=>$('import-dialog').close();$('upload-directory').onchange=async()=>{try{await ensureFileSettings();await uploadList(Array.from($('upload-directory').files).filter(f=>matchesImportFormat(f.name)))}catch(e){error(e)}finally{$('upload-directory').value=''}};$('upload').onchange=()=>uploadList($('upload').files);
+document.addEventListener('dragover',e=>{e.preventDefault()});document.addEventListener('drop',async e=>{e.preventDefault();if(busy||importing||!e.dataTransfer.files.length)return;await uploadList(Array.from(e.dataTransfer.files))});
 function badge(l){return node('span',l,'badge '+l)}
 function renderGroups(){
  $('groups').replaceChildren();$('result-count').textContent=fmt(groups.length)+' 类';$('empty').hidden=groups.length>0;

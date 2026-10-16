@@ -15,7 +15,7 @@ async function main(){
  const original=local.map(file=>fs.readFileSync(file));
  const binary=process.env.LR_TEST_BINARY||path.join(root,'dist/log-reviewer-windows-amd64.exe');
  const fixture=spawn(process.env.LR_SFTP_FIXTURE_BINARY||path.join(root,'.work/sftp-fixture.exe'),[],{windowsHide:true});
- const gui=spawn(binary,['gui','--host','127.0.0.1','--no-browser','--port','0','--https-port','0','--tls-file',path.join(temporary,'tls.pem'),'--state-file',path.join(temporary,'state.json'),'--rule-dir',path.join(temporary,'rules')],{cwd:temporary,windowsHide:true});
+ const gui=spawn(binary,['gui','--show-file-picker','--show-path-input','--host','127.0.0.1','--no-browser','--port','0','--https-port','0','--tls-file',path.join(temporary,'tls.pem'),'--state-file',path.join(temporary,'state.json'),'--rule-dir',path.join(temporary,'rules')],{cwd:temporary,windowsHide:true});
  let browser,context;
  try{
   const [remote,url]=await Promise.all([startup(fixture,text=>{try{return JSON.parse(text)}catch{return null}}),startup(gui,text=>text.match(/HTTP: (http:\/\/\S+)/)?.[1])]);
@@ -24,7 +24,7 @@ async function main(){
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
   await page.goto(url,{timeout:10000});assert((await page.title()).includes('Log Reviewer'));await page.locator('#upload-button').waitFor();
   let selected=[];await page.route('**/api/pick-paths?kind=files',route=>route.fulfill({json:{paths:selected}}));
-  async function pick(paths){selected=paths;await page.locator('#upload-button').click();await Promise.all([page.waitForResponse(response=>response.url().includes('/api/pick-paths?kind=files')),page.locator('#import-files').click()])}
+  async function pick(paths){await page.evaluate(()=>applyFileSettings({...fileSettings,show_file_picker:true,show_path_input:false}));selected=paths;await page.locator('#file-picker-button').click();await Promise.all([page.waitForResponse(response=>response.url().includes('/api/pick-paths?kind=files')),page.locator('#import-files').click()])}
   async function settled(){await page.waitForFunction(()=>!importing)}
   await pick([local[0]]);await settled();assert.equal(await page.locator('.file-chip').count(),1);
   await pick([local[1]]);await settled();assert.equal(await page.locator('.file-chip').count(),1);
@@ -39,7 +39,7 @@ async function main(){
   await pick([local[3]]);await conflict.waitFor();await conflict.getByRole('button',{name:'取消',exact:true}).click();await settled();assert.equal(await page.locator('.file-chip').count(),2);
   await pick([local[3]]);await conflict.waitFor();await conflict.getByRole('button',{name:'覆盖',exact:true}).click();await settled();assert.deepEqual(await page.evaluate(()=>files),[local[2],local[3]]);
   await page.evaluate(()=>{files=[];uploads=[];pathImports.clear();renderFiles()});
-  await page.locator('#path-toggle').click();await page.locator('#paths').fill(local.slice(0,3).join('\n'));await page.locator('#add-paths').click();await conflict.waitFor();
+  await page.evaluate(()=>applyFileSettings({...fileSettings,show_file_picker:false,show_path_input:true}));await page.locator('#path-toggle').click();await page.locator('#paths').fill(local.slice(0,3).join('\n'));await page.locator('#add-paths').click();await conflict.waitFor();
   await conflict.getByLabel('保留文件名称').fill('manual.log');await conflict.getByRole('button',{name:'保留并重命名',exact:true}).click();await settled();assert.equal(await page.locator('.file-chip').count(),2);assert((await page.locator('#files').innerText()).includes('manual.log'));
   await page.evaluate(async text=>{await uploadList([new File([text],'uploaded-copy.log')])},contents[0]);assert.equal(await page.locator('.file-chip').count(),2);assert.equal(await page.evaluate(()=>uploads.length),0);
   await page.locator('#remote-button').click();

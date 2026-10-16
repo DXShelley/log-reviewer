@@ -1,0 +1,34 @@
+const {chromium}=require('playwright'),{spawn}=require('child_process');
+const fs=require('fs'),os=require('os'),path=require('path'),assert=require('assert');
+async function main(){
+ const root=path.resolve(__dirname,'..'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'lr-import-buttons-')),logs=path.join(dir,'部署日志 [01]');fs.mkdirSync(logs);
+ const text='2026-10-15 12:00:00 ERROR app : upload failed\n',other='2026-10-15 12:01:00 WARN app : deployment warning\n';
+ fs.writeFileSync(path.join(logs,'server.log'),other);fs.writeFileSync(path.join(logs,'duplicate.log'),text);
+ let child,browser,context;
+ async function stop(){if(child){const current=child;child=null;await new Promise(resolve=>{if(current.exitCode!==null)return resolve();current.once('exit',resolve);current.kill()})}}
+ async function start(flags=[]){child=spawn(process.env.LR_TEST_BINARY||path.join(root,'dist/log-reviewer-windows-amd64.exe'),['gui','--host','127.0.0.1','--no-browser','--port','0','--https-port','0','--state-file',path.join(dir,'state.json'),'--tls-file',path.join(dir,'tls.pem'),'--rule-dir',path.join(dir,'rules'),...flags],{windowsHide:true});return new Promise((resolve,reject)=>{let output='';const timeout=setTimeout(()=>reject(Error('startup timeout')),10000);child.on('error',reject);child.stdout.on('data',b=>{output+=b;const match=output.match(/HTTP: (http:\/\/\S+)/);if(match){clearTimeout(timeout);resolve(match[1])}})})}
+ try{
+  browser=await chromium.connectOverCDP('http://127.0.0.1:9222',{timeout:5000});context=await browser.newContext({viewport:{width:1440,height:900}});const page=await context.newPage(),errors=[],responses=[];page.on('pageerror',e=>errors.push(e.message));
+  page.on('response',async response=>{if(response.url().includes('/api/upload?')&&response.ok())responses.push(await response.json())});
+  await page.goto(await start(),{timeout:10000});await page.waitForFunction(()=>fileSettings!==null,null,{timeout:5000}).catch(e=>{console.error(errors);throw e});
+  assert(await page.getByRole('button',{name:'上传文件',exact:true}).isVisible());assert(await page.locator('#path-toggle').isVisible());assert(!await page.locator('#file-picker-button').isVisible());
+  async function upload(name,buffer){await page.locator('#upload-button').click();const chooser=page.waitForEvent('filechooser');await page.locator('#import-files').click();await (await chooser).setFiles({name,mimeType:'text/plain',buffer:Buffer.from(buffer)});await page.waitForFunction(()=>!importing)}
+  await upload('browser.log',text);await page.waitForFunction(()=>uploads.length===1);await upload('renamed.log',text);assert.equal(await page.locator('.file-chip').count(),1);assert.equal(responses.length,2);assert.equal(responses[0].id,responses[1].id);
+  await page.locator('#path-toggle').click();await page.locator('#paths').fill(path.join(logs,'duplicate.log'));await page.locator('#add-paths').click();await page.waitForFunction(()=>!importing);assert.equal(await page.locator('.file-chip').count(),1);
+  const drag=other.replace('deployment warning','drag upload');await page.evaluate(text=>{const transfer=new DataTransfer();transfer.items.add(new File([text],'drag.log'));document.dispatchEvent(new DragEvent('drop',{dataTransfer:transfer,bubbles:true,cancelable:true}))},drag);await page.waitForFunction(()=>uploads.length===2);await page.locator('#analyze').click();await page.waitForFunction(()=>!busy&&groups.length===2);
+  await page.screenshot({path:path.join(dir,'default-desktop.png')});await stop();
+  await page.route('**/api/paths',async route=>{if(route.request().method()!=='GET')return route.continue();const response=await route.fetch({timeout:10000});const body=await response.json();await route.fulfill({json:{...body,native_picker:false,local_access:false}})});
+  await page.goto(await start(['--show-file-picker']),{timeout:10000});await page.waitForFunction(()=>fileSettings!==null);assert(await page.locator('#upload-button').isVisible());assert(await page.locator('#file-picker-button').isVisible());assert(!await page.locator('#path-toggle').isVisible());
+  const before=responses.length;await page.locator('#file-picker-button').click();await page.locator('#import-files').click();await page.locator('#deployment-browser').waitFor();
+  for(const [width,height]of [[1440,900],[390,480]]){await page.setViewportSize({width,height});assert(await page.evaluate(()=>{const dialog=document.getElementById('deployment-browser'),r=dialog.getBoundingClientRect();return r.x>=0&&r.y>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&dialog.scrollWidth<=dialog.clientWidth}));await page.screenshot({path:path.join(dir,'deployment-browser-'+width+'.png')})}await page.setViewportSize({width:1440,height:900});
+  const location=page.getByRole('textbox',{name:'部署机器目录'});await location.fill(path.join(dir,'missing'));await page.locator('#deployment-browser').getByRole('button',{name:'打开',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#deployment-browser [role=status]').textContent.includes('cannot find'));
+  await location.fill(logs);await page.locator('#deployment-browser').getByRole('button',{name:'打开',exact:true}).click();await page.locator('#deployment-browser').getByLabel('server.log',{exact:true}).check();await page.getByRole('button',{name:'导入选中文件',exact:true}).click();await page.locator('#deployment-browser').waitFor({state:'hidden'});assert.equal(responses.length,before);assert.equal(await page.evaluate(()=>files.length),1);
+  await upload('browser-copy.log',other);assert.equal(await page.locator('.file-chip').count(),1);
+  await upload('unique.log',text);assert.equal(await page.locator('.file-chip').count(),2);
+  await page.locator('#file-picker-button').click();await page.locator('#import-directory').click();await location.fill(logs);await page.locator('#deployment-browser').getByRole('button',{name:'打开',exact:true}).click();await page.getByRole('button',{name:'选择当前目录',exact:true}).click();await page.locator('#deployment-browser').waitFor({state:'hidden'});assert.equal(await page.locator('.file-chip').count(),2);
+  await page.locator('#analyze').click();await page.waitForFunction(()=>!busy&&groups.length===2);
+  for(const width of [1440,390]){await page.setViewportSize({width,height:900});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:path.join(dir,'file-mode-'+width+'.png')})}
+  assert.deepEqual(errors,[]);console.log('PASS upload always visible, mutually exclusive deployment modes, actual browser upload, server upload dedup, cross-source dedup, drag upload, remote deployment browsing, directory selection, analysis, desktop/mobile. Evidence: '+dir);
+ }finally{if(context)await context.close();if(browser)await browser.close();await stop()}
+}
+main().catch(e=>{console.error(e);process.exitCode=1});

@@ -19,7 +19,9 @@
  for(const [value,label] of [['horizontal','左右'],['vertical','上下'],['rows','上中下'],['columns','左中右'],['top','上左右'],['dialog','详情弹框']])layout.add(new Option(label,value));
  layoutGroup.append(layout);headerActions.append(layoutGroup);
  const fileActions=document.querySelector('.file-actions'),sourceActions=node('div',undefined,'source-actions'),analysisActions=node('div',undefined,'analysis-actions');
+ const picker=logIcon('FolderOpen','选择文件');picker.id='file-picker-button';picker.classList.remove('icon-button');picker.hidden=true;picker.append(node('span','选择文件'));picker.title='选择部署机器上的文件或目录';
  for(const id of ['upload-button','remote-button','paste-button','path-toggle'])sourceActions.append($(id));
+ sourceActions.querySelector('#upload-button').after(picker);picker.onclick=()=>{importSource='deployment';$('import-dialog').querySelector('h2').textContent='选择部署机器文件';$('import-dialog').showModal()};
  analysisActions.append(document.querySelector('.check'),$('analyze'),$('cancel'));fileActions.append(sourceActions,analysisActions);
  const filterBand=node('section',undefined,'filter-band'),filterHeading=node('div',undefined,'section-label');filterHeading.append(node('h2','筛选与导出'));
  $('search').before(filterBand);filterBand.append(filterHeading,$('search'));
@@ -44,7 +46,7 @@
  auto.onchange=applyDefaults;reset.onclick=()=>{$('context-before').value=20;$('context-after').value=100;auto.checked=true;applyDefaults()};
  const mask=node('dialog');mask.id='operation-mask';mask.setAttribute('aria-label','正在处理');const maskText=node('p'),maskCancel=node('button','取消分析');maskCancel.onclick=()=>$('cancel').click();mask.append(node('div',undefined,'operation-spinner'),maskText,maskCancel);document.body.append(mask);mask.addEventListener('cancel',event=>event.preventDefault());
  let exporting=0;function updateMask(){const active=busy||exporting>0;maskText.textContent=busy?'正在分析日志…':'正在导出日志…';maskCancel.hidden=!busy;if(active&&!mask.open)mask.showModal();if(!active&&mask.open)mask.close()}
- const originalSetBusy=setBusy;setBusy=function(value){originalSetBusy(value);updateMask()};
+ const originalSetBusy=setBusy;setBusy=function(value){originalSetBusy(value);picker.disabled=value||importing;$('path-toggle').disabled=value||importing;updateMask()};
  const originalAnalyze=$('analyze').onclick;$('analyze').onclick=async function(event){setBusy(true);try{await originalAnalyze.call(this,event)}finally{poll()}};
  const originalDownload=download;download=async function(...args){exporting++;updateMask();try{return await originalDownload(...args)}finally{exporting--;updateMask()}};
  const viewer=node('section',undefined,'event-viewer');viewer.id='event-viewer';workspace.append(viewer);

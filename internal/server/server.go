@@ -75,6 +75,7 @@ func (s *Server) Handler(addr string) http.Handler {
 	m.Handle("/", http.FileServer(http.FS(sub)))
 	m.HandleFunc("/api/status", s.status)
 	m.HandleFunc("/api/pick-paths", s.pickPaths)
+	m.HandleFunc("/api/browse", s.browseFiles)
 	m.HandleFunc("/api/access-settings", s.accessSettings)
 	m.HandleFunc("/api/analyze", s.analyze)
 	m.HandleFunc("/api/cancel", s.cancel)

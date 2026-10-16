@@ -1,6 +1,6 @@
 # 服务器与远程访问
 
-当前 GUI 的访问控制入口位于顶部“设置”中的“访问控制”组。文件选择与路径输入按钮可通过 `--show-file-picker`、`--show-path-input` 分别控制，详见 [GUI 设置](gui-settings.md)。
+当前 GUI 的访问控制入口位于顶部“设置”中的“访问控制”页签。“上传文件”始终存在；默认另显示“选择路径”，通过 `--show-file-picker` 或 `--show-path-input=false` 切换为部署机器“选择文件”入口。两个部署文件入口互斥，详见 [GUI 设置](gui-settings.md)。
 
 ## 无图形环境
 

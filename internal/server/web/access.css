@@ -8,3 +8,24 @@
 #access-error{color:#af2634}
 #access-open{width:34px;height:34px;flex:none;padding:7px}
 #access-open svg{width:18px;height:18px}
+#access-dialog[open]{display:flex;flex-direction:column;max-height:90vh;max-height:90dvh;overflow:hidden;padding:0}
+#access-dialog>.dialog-header,#access-dialog>.settings-tabs{flex:none}
+.settings-tabs{display:flex;gap:6px;padding:8px 18px;border-bottom:1px solid var(--border)}
+.settings-tabs [role=tab]{border:0;border-radius:0;background:transparent;border-bottom:2px solid transparent}
+.settings-tabs [aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+#access-dialog>[role=tabpanel]{min-height:0;overflow:auto;margin:0}
+#access-dialog>[role=tabpanel][hidden]{display:none}
+#access-dialog .dialog-footer{position:sticky;bottom:0;justify-content:flex-end;background:var(--surface,#fff);z-index:1}
+#access-dialog h3{margin:0 0 8px;font-size:14px}
+#file-settings-status:empty{display:none}
+#deployment-browser[open]{display:flex;flex-direction:column;max-height:90vh;max-height:90dvh;overflow:hidden}
+#deployment-browser .dialog-header,#deployment-browser .picker-nav,#deployment-browser .dialog-footer{flex:none}
+#deployment-browser .picker-nav{flex-wrap:wrap}
+#deployment-browser .picker-nav select{max-width:130px}
+#deployment-browser .picker-nav input{min-width:100px}
+#deployment-browser .picker-list{min-height:0;flex:1 1 350px}
+#deployment-browser .picker-entry label{display:flex;align-items:center;gap:8px;min-width:0}
+#deployment-browser .picker-entry label span{overflow-wrap:anywhere}
+#deployment-browser .picker-entry button{justify-content:flex-start}
+#deployment-browser .dialog-footer{gap:12px}
+#deployment-browser .dialog-footer p{margin:0;min-width:0;overflow-wrap:anywhere}

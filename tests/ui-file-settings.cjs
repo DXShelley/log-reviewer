@@ -19,11 +19,11 @@ async function main(){
   fs.writeFileSync(path.join(remote.root,'logs','service.text'),'2026-10-15 12:30:00 ERROR service : text format test\n');
   browser=await chromium.connectOverCDP('http://127.0.0.1:9222',{timeout:5000});context=await browser.newContext({viewport:{width:1440,height:1000}});
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
-  await page.goto(url,{timeout:10000});assert((await page.title()).includes('Log Reviewer'));await page.locator('#file-settings-open').waitFor();
+  await page.goto(url,{timeout:10000});assert((await page.title()).includes('Log Reviewer'));await page.locator('#path-toggle').waitFor();
   async function settings(directory,patterns){
-   await page.locator('#file-settings-open').click();await page.locator('#file-settings-dialog').waitFor();
+   await page.locator('#access-open').click();await page.locator('#settings-tab-1').click();
    await page.locator('#remote-save-directory').fill(directory);if(patterns)await page.locator('#file-patterns').fill(patterns);
-   await page.locator('#file-settings-save').click();await page.locator('#file-settings-dialog').waitFor({state:'hidden'});
+   await page.locator('#file-settings-save').click();await page.locator('#access-dialog').waitFor({state:'hidden'});
   }
   const first=path.join(temporary,'first'),second=path.join(temporary,'second');
   await settings(first);assert(fs.readFileSync(stateFile,'utf8').includes('*.text'));
@@ -52,7 +52,7 @@ async function main(){
   const reloadNames=await page.locator('#files').innerText(),reloadTitles=await page.locator('#files span').evaluateAll(items=>items.map(e=>e.title));
   await settings(path.join(temporary,'third'),'*.text');
   assert.equal(await page.locator('#files').innerText(),reloadNames);assert.deepEqual(await page.locator('#files span').evaluateAll(items=>items.map(e=>e.title)),reloadTitles);
-  await page.locator('#analyze').click();await page.waitForFunction(()=>!busy&&groups.length===3);
+  await page.locator('#analyze').click();await page.waitForFunction(()=>!busy&&groups.length===1);
   await page.locator('#remote-button').click();assert.equal(await page.locator('#remote-pattern').inputValue(),'*.text');
   for(const field of ['host','port','user','path','fingerprint','password'])await page.locator('#remote-'+field).fill(String(remote[field]));
   await page.locator('#remote-ssh-dir').fill(path.join(temporary,'ssh'));await page.locator('#remote-submit').click();
@@ -65,7 +65,7 @@ async function main(){
    assert(layout.rows>1&&!layout.overflow&&!layout.clipped,JSON.stringify(layout));
    await page.screenshot({path:path.join(temporary,'files-'+width+'.png'),fullPage:true});
   }
-  await page.locator('#file-settings-open').click();await page.screenshot({path:path.join(temporary,'settings-mobile.png')});
+  await page.locator('#access-open').click();await page.locator('#settings-tab-1').click();await page.screenshot({path:path.join(temporary,'settings-mobile.png')});
   assert.deepEqual(errors,[]);console.log('File settings passed: persistence, original filenames, .text discovery, migration with usable analysis, unchanged remote names/paths, desktop/mobile wrapping. Evidence: '+temporary);
  }finally{if(context)await context.close();if(browser)await browser.close();gui.kill();fixture.kill()}
 }

@@ -4,7 +4,7 @@ const path=require('path'),fs=require('fs'),assert=require('assert');
 
 async function main(){
  const root=path.resolve(__dirname,'..'),bin=process.env.LR_TEST_BINARY||path.join(root,'dist','log-reviewer-windows-amd64.exe');
- const child=spawn(bin,['gui','--no-browser','--port','0'],{cwd:root,windowsHide:true});
+ const child=spawn(bin,['gui','--state-file',path.join(require('os').tmpdir(),'lr-'+require('crypto').randomUUID()+'.json'),'--tls-file',path.join(require('os').tmpdir(),'lr-'+require('crypto').randomUUID()+'.pem'),'--host','127.0.0.1','--https-port','0','--no-browser','--port','0'],{cwd:root,windowsHide:true});
  let output='',browser,context;
  try{
   const url=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('startup timeout')),10000);child.stdout.on('data',b=>{output+=b;const match=output.match(/HTTP: (http:\/\/\S+)/);if(match){clearTimeout(timer);resolve(match[1])}});child.on('error',reject)});

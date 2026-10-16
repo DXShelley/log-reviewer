@@ -71,6 +71,7 @@ const help = `Log Reviewer 1.0.0 - local, streaming log classification
   log-reviewer gui [--host 0.0.0.0] [--port 8765] [--no-browser] [files...]
     [--allowed-hosts logs.example.com] [--cache-dir directory] [--rule-dir directory]
     [--allowed-client-ips IP,CIDR|off] [--state-file file]
+    [--show-file-picker] [--show-path-input=true|false]
     [--https-port 8766] [--http=false] [--tls-cert cert.pem --tls-key key.pem]
     [--tls-file log-reviewer-tls.pem]
   log-reviewer analyze [--out report.json] [--all] [--rules rules.json] files...
@@ -250,12 +251,17 @@ func gui(args []string) error {
 	tlsFile := f.String("tls-file", filepath.Join(filepath.Dir(executable), "log-reviewer-tls.pem"), "persistent self-signed certificate and private key bundle")
 	cacheDir := f.String("cache-dir", "", "parent directory for temporary session files")
 	noBrowser := f.Bool("no-browser", false, "do not open browser")
-	showFilePicker := f.Bool("show-file-picker", true, "show GUI file selection button")
-	showPathInput := f.Bool("show-path-input", false, "show GUI path input button")
+	showFilePicker := f.Bool("show-file-picker", false, "select deployment files instead of entering paths; uploads remain available")
+	showPathInput := f.Bool("show-path-input", true, "enter deployment paths (false selects file picker); show-file-picker takes precedence")
 	keep := f.Bool("keep-cache", false, "keep session index after exit")
 	ruleDir := f.String("rule-dir", defaultRules, "persistent per-language rule directory")
 	if err := f.Parse(args); err != nil {
 		return err
+	}
+	if *showFilePicker {
+		*showPathInput = false
+	} else if !*showPathInput {
+		*showFilePicker = true
 	}
 	if *port < 0 || *port > 65535 || *httpsPort < 0 || *httpsPort > 65535 {
 		return errors.New("port must be between 0 and 65535")
