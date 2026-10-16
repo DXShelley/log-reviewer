@@ -21,6 +21,7 @@ const RecordSize = 40
 const maxPreview = 64 * 1024
 
 type Source struct {
+	Encoding  string        `json:"encoding,omitempty"`
 	Remote    *RemoteSource `json:"remote,omitempty"`
 	Languages []string      `json:"languages"`
 	Path      string        `json:"path"`
@@ -275,7 +276,7 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 		}
 	}()
 	w := bufio.NewWriterSize(f, 1024*1024)
-	report := &Report{Schema: "log-reviewer/v1", Version: "1.0.0", Created: time.Now().Format(time.RFC3339), Formats: map[string]uint64{}, Groups: []*Group{}, Sources: []Source{}, IndexPath: f.Name(), Notes: []string{"Impact is a heuristic based on log severity; business impact is not inferred.", "Scope lists observed files and logger/service names, not affected users.", "Local timestamps without offsets use the scanning machine's local timezone.", "Grouping masks numeric values and IDs; inspect occurrences before assuming identical causes."}}
+	report := &Report{Schema: "log-reviewer/v1", Version: "1.0.1", Created: time.Now().Format(time.RFC3339), Formats: map[string]uint64{}, Groups: []*Group{}, Sources: []Source{}, IndexPath: f.Name(), Notes: []string{"Impact is a heuristic based on log severity; business impact is not inferred.", "Scope lists observed files and logger/service names, not affected users.", "Local timestamps without offsets use the scanning machine's local timezone.", "Grouping masks numeric values and IDs; inspect occurrences before assuming identical causes."}}
 	for _, path := range paths {
 		in, err := openRead(path, opt.Readers)
 		if err != nil {
@@ -314,6 +315,8 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 			return nil, fmt.Errorf("unsupported UTF-16 or gzip file: %s; convert to UTF-8 or decompress first", src.Path)
 		}
 		var line uint64
+		probe, _ := r.Peek(64 * 1024)
+		src.Encoding = sourceEncoding(probe)
 		var pending *Record
 		var header Header
 		stack := sha256.New()
@@ -444,6 +447,10 @@ func Analyze(paths []string, dir string, opt Options) (*Report, error) {
 					b = prefix
 				}
 				if len(b) > 0 {
+					if sourceEncoding(b) == "GB18030" {
+						src.Encoding = "GB18030"
+					}
+					b = decodeText(src.Encoding, b)
 					h, ok := p.Parse(b, opt.All)
 					if h.Attach && pending != nil {
 						ok = false
@@ -595,12 +602,8 @@ func SafeOutput(r *Report, path string) error {
 	return nil
 }
 func LoadReport(path string) (*Report, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
 	var r Report
-	if err = json.Unmarshal(b, &r); err != nil {
+	if err := ReadJSON(path, &r); err != nil {
 		return nil, err
 	}
 	if r.Schema != "log-reviewer/v1" {

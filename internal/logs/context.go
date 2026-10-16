@@ -17,11 +17,12 @@ func findContextAnchor(f ReadFile, rec Record, keyword string, re *regexp.Regexp
 	matched := false
 	truncated := false
 	preview := make([]byte, 0, 4096)
+	decodeChunk := chunkText(f)
 	for {
 		b, err := reader.ReadSlice('\n')
 		position += int64(len(b))
 		if keyword != "" {
-			lower := strings.ToLower(string(b))
+			lower := strings.ToLower(string(decodeChunk(b, err != bufio.ErrBufferFull)))
 			if strings.Contains(prefix+lower, needle) {
 				matched = true
 			}
@@ -42,11 +43,11 @@ func findContextAnchor(f ReadFile, rec Record, keyword string, re *regexp.Regexp
 		if err != nil && err != io.EOF {
 			return 0, 0, 0, "", false, false, err
 		}
-		if keyword == "" && re != nil && re.Match(bytes.TrimRight(preview, "\r\n")) {
+		if keyword == "" && re != nil && re.Match(bytes.TrimRight(fileText(f, preview), "\r\n")) {
 			matched = true
 		}
 		if matched {
-			return start, position, line, string(preview), truncated, true, nil
+			return start, position, line, string(fileText(f, preview)), truncated, true, nil
 		}
 		if err == io.EOF {
 			return 0, 0, 0, "", false, false, nil
@@ -115,7 +116,7 @@ func readContext(f ReadFile, offset int64, count int, before bool) (string, bool
 					lines = lines[:count]
 				}
 			}
-			return strings.Join(lines, "\n"), !boundary && len(lines) < count, nil
+			return string(fileText(f, []byte(strings.Join(lines, "\n")))), !boundary && len(lines) < count, nil
 		}
 	}
 }

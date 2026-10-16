@@ -1,6 +1,10 @@
 # 第三方依赖许可
 
-SFTP 与 GUI 使用以下组件。分发二进制时请同时保留本文件及 `docs/licenses/`。
+SFTP、日志解码与 GUI 使用以下组件。分发二进制时请同时保留本文件及 `docs/licenses/`。
+
+## 日志编码组件
+
+- `golang.org/x/text v0.41.0`：BSD 3-Clause，使用 `encoding/simplifiedchinese` 和 `transform` 进行 GBK / GB18030 解码及流式转换；完整许可见 [golang-x-text-LICENSE.txt](licenses/golang-x-text-LICENSE.txt)。纯 Go，无需 CGO 或额外运行时。`saintfish/chardet` 仅作为选型候选介绍，未进入项目依赖。
 
 ## GUI 组件
 

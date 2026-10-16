@@ -64,12 +64,8 @@ func (s *RuleStore) Overrides() ([]LanguageRule, error) {
 		if len(rules) >= 256 {
 			return nil, errors.New("more than 256 language overrides")
 		}
-		b, err := os.ReadFile(filepath.Join(s.Dir, entry.Name()))
-		if err != nil {
-			return nil, err
-		}
 		var rule LanguageRule
-		if err = json.Unmarshal(b, &rule); err != nil {
+		if err = ReadJSON(filepath.Join(s.Dir, entry.Name()), &rule); err != nil {
 			return nil, fmt.Errorf("%s: %w", entry.Name(), err)
 		}
 		if rule.ID+".json" != entry.Name() {
