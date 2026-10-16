@@ -45,6 +45,15 @@ function matchesImportFormat(name){
  const message=node('p');message.id='file-settings-status';message.setAttribute('role','status');
  const footer=node('div',undefined,'dialog-footer'),save=node('button','保存');save.id='file-settings-save';save.type='submit';save.className='primary';footer.append(reset,save);
  const settingsDialog=$('access-dialog');
+ const authenticationDialog=node('dialog');authenticationDialog.id='authentication-dialog';
+ const authenticationHeader=node('div',undefined,'dialog-header'),authenticationTitle=node('h2','会话验证'),authenticationClose=node('button','×');
+ authenticationTitle.id='authentication-title';authenticationDialog.setAttribute('aria-labelledby',authenticationTitle.id);
+ authenticationClose.title='关闭';authenticationClose.setAttribute('aria-label','关闭会话验证');authenticationClose.onclick=()=>authenticationDialog.close();authenticationHeader.append(authenticationTitle,authenticationClose);
+ const authenticationBody=node('div',undefined,'copy-body');
+ authenticationBody.append(settingsDialog.querySelector('label[for="access-token"]'),$('access-token'),$('access-auth'));
+ authenticationDialog.append(authenticationHeader,authenticationBody);document.body.append(authenticationDialog);
+ const authenticationOpen=node('button','会话验证');authenticationOpen.id='authentication-open';authenticationOpen.title='验证会话 token';authenticationOpen.onclick=()=>authenticationDialog.showModal();
+ const headerActions=document.querySelector('.header-right');headerActions.prepend(document.querySelector('.local'));document.querySelector('.local').after(authenticationOpen);
  const close=$('access-close');
  body.style.padding='18px';body.style.display='grid';body.style.gap='10px';
  document.querySelector('.local').style.overflowWrap='anywhere';
@@ -54,12 +63,13 @@ function matchesImportFormat(name){
  settingsDialog.append(accessPanel);
  form.id='settings-files-panel';
  const tabs=node('div',undefined,'settings-tabs');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','设置分类');
- const panels=[accessPanel,form],tabButtons=[];
- function selectSettings(index){panels.forEach((panel,i)=>{panel.hidden=i!==index;tabButtons[i].setAttribute('aria-selected',String(i===index));tabButtons[i].tabIndex=i===index?0:-1})}
- for(const [i,label]of ['访问控制','文件与分析'].entries()){
+ const rulesPanel=node('section');rulesPanel.id='settings-rules-panel';rulesPanel.append($('rule-manager').querySelector('.rule-manager-body'));settingsDialog.append(rulesPanel);$('rules-toggle').hidden=true;
+ const panels=[accessPanel,form,rulesPanel],tabButtons=[];
+ function selectSettings(index){panels.forEach((panel,i)=>{panel.hidden=i!==index;tabButtons[i].setAttribute('aria-selected',String(i===index));tabButtons[i].tabIndex=i===index?0:-1});settingsDialog.classList.toggle('show-rules',index===2);if(index===2)rulesPanel.dispatchEvent(new Event('rules-open'))}
+ for(const [i,label]of ['访问控制','文件与分析','识别规则'].entries()){
   const tab=node('button',label);tab.type='button';tab.id='settings-tab-'+i;tab.setAttribute('role','tab');tab.setAttribute('aria-controls',panels[i].id);
   panels[i].setAttribute('role','tabpanel');panels[i].setAttribute('aria-labelledby',tab.id);
-  tab.onclick=()=>selectSettings(i);tab.onkeydown=event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?1:1-i;selectSettings(next);tabButtons[next].focus()}};
+  tab.onclick=()=>selectSettings(i);tab.onkeydown=event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?panels.length-1:(i+(event.key==='ArrowRight'?1:-1)+panels.length)%panels.length;selectSettings(next);tabButtons[next].focus()}};
   tabButtons.push(tab);tabs.append(tab);
  }
  settingsDialog.querySelector('.dialog-header').after(tabs);
@@ -75,7 +85,8 @@ function matchesImportFormat(name){
  }
  $('access-open').onclick=()=>{selectSettings(0);openSettings();loadFileSettings()};
  const authenticate=$('access-auth').onclick;
- $('access-auth').onclick=async()=>{await authenticate();if(!$('access-save').disabled)await loadFileSettings()};
+ const authenticationError=node('p');authenticationError.setAttribute('role','alert');authenticationBody.append(authenticationError);
+ $('access-auth').onclick=async()=>{await authenticate();if($('access-error').hidden){authenticationDialog.close();await loadFileSettings()}else authenticationError.textContent=$('access-error').textContent};
  ensureFileSettings().catch(error);
  let saving=false;
  settingsDialog.addEventListener('cancel',event=>{if(saving)event.preventDefault()});

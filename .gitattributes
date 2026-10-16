@@ -10,3 +10,4 @@
 *.log text eol=lf
 *.exe binary
 dist/log-reviewer-* binary
+internal/server/web/vendor/** linguist-vendored

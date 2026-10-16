@@ -16,6 +16,7 @@ async function main(){
   for(const [flags,fileVisible,pathVisible]of [[[],false,true],[['--show-file-picker'],true,false],[['--show-file-picker','--show-path-input'],true,false],[['--show-path-input=false'],true,false]]){
    const url=await start(flags);await page.goto(url,{timeout:10000});await page.waitForFunction(()=>fileSettings!==null);
    assert(await page.locator('#upload-button').isVisible());assert.equal(await page.locator('#file-picker-button').isVisible(),fileVisible);assert.equal(await page.locator('#path-toggle').isVisible(),pathVisible);
+   assert.equal(await page.locator('.local + button').getAttribute('id'),'authentication-open');assert(!await page.locator('#rules-toggle').isVisible());
    if(!flags.length){
     await page.locator('#path-toggle').click();assert(await page.locator('#paths-panel').isVisible());
     const log=path.join(dir,'app.log');fs.writeFileSync(log,'2026-10-15 12:00:00 ERROR service : request failed\n');
@@ -32,7 +33,7 @@ async function main(){
      }
      await page.locator('#access-close').click();
     }
-    await page.locator('#access-open').click();await page.locator('#settings-tab-0').focus();await page.keyboard.press('ArrowRight');assert.equal(await page.locator('#settings-tab-1').getAttribute('aria-selected'),'true');
+    await page.locator('#access-open').click();await page.locator('#settings-tab-0').focus();await page.keyboard.press('End');assert.equal(await page.locator('#settings-tab-2').getAttribute('aria-selected'),'true');await page.waitForFunction(()=>document.querySelectorAll('#language-list button').length>0);assert(await page.locator('#rule-evidence').isVisible());await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');assert.equal(await page.locator('#settings-tab-1').getAttribute('aria-selected'),'true');
     await page.locator('#file-patterns').fill('*.log\n*.txt');await page.locator('#all').check();await page.locator('#file-settings-save').click();await page.locator('#access-dialog').waitFor({state:'hidden'});
     const saved=JSON.parse(fs.readFileSync(path.join(dir,'state.json')));assert.deepEqual(saved.file_patterns,['*.log','*.txt']);assert.equal(saved.include_all,true);
     await page.reload();await page.waitForFunction(()=>fileSettings!==null);assert(await page.locator('#all').isChecked());

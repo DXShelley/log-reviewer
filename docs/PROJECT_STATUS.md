@@ -8,7 +8,7 @@
 
 单个 Go 二进制提供 CLI 和浏览器 GUI，支持 Windows、Linux、macOS 的 amd64/arm64。构建产物和 SHA256 校验文件仅通过 GitHub Releases 分发，本地构建可写入忽略版本管理的 `dist/`。体积以对应发行版为准。版本可用 `log-reviewer version` 检查。
 
-`dev` 保留完整源码、配置、脚本、文档、测试与开发资源；`main` 保留交付文档、样例和维护入口，不包含二进制、缓存或测试报告。后续日常开发从 `dev` 开始，文档更新不移动已有版本标签。
+`dev` 和 `main` 均保留完整 Go 源码、模块文件、配置、脚本、文档、测试与开发资源，不包含二进制、缓存或测试报告。日常开发从 `dev` 开始，验证后合并到默认分支 `main`；文档更新不移动已有版本标签。
 
 ## 已实现的关键能力
 
@@ -67,7 +67,7 @@ go build -o .work/sftp-fixture.exe ./tests/sftp-fixture
 node tests/ui-sftp.cjs
 ```
 
-测试使用独立浏览器 context；SFTP 测试使用本地 fixture。截图位于临时目录或忽略版本管理的 `reports/`。v0.7.0 验证结果见 [验证记录](VALIDATION-0.7.0.md)，最新只读用例见 [测试说明](readonly-testing.md)。先提交 `dev`，再通过 `main` worktree 同步必要交付文件；正式发版时另行创建新标签并上传 Release assets，不将二进制放入分支。
+测试使用独立浏览器 context；SFTP 测试使用本地 fixture。截图位于临时目录或忽略版本管理的 `reports/`。v0.7.0 验证结果见 [验证记录](VALIDATION-0.7.0.md)，最新只读用例见 [测试说明](readonly-testing.md)。先提交 `dev`，再通过 `main` worktree 合并完整项目；正式发版时另行创建新标签并上传 Release assets，不将二进制放入分支。
 
 ## 已知限制与后续重点
 

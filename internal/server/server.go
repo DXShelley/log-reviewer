@@ -515,7 +515,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	idBytes := make([]byte, 8)
 	rand.Read(idBytes)
 	id := hex.EncodeToString(idBytes)
-	dir := filepath.Join(s.dir, "uploads", id)
+	dir := filepath.Join(s.remoteDir, "uploads", id)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		fail(w, 500, err)
 		return

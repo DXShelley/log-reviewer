@@ -38,7 +38,7 @@ async function main(){
   assert.strictEqual(await page.locator('#access-ips').inputValue(),'127.0.0.1\n10.20.0.0/24');
   const oldStatus=await page.evaluate(async old=>{const r=await fetch('/api/status',{headers:{Authorization:'Bearer '+old}});return r.status},oldToken);assert.strictEqual(oldStatus,401);
   await page.evaluate(()=>{sessionStorage.clear();history.replaceState(null,'',location.pathname)});await page.reload();
-  await page.locator('#access-dialog[open]').waitFor();await page.locator('#access-token').fill(new URL(url).hash.slice(1));await page.locator('#access-auth').click();await page.waitForFunction(()=>!document.getElementById('access-save').disabled);
+  await page.locator('#authentication-dialog[open]').waitFor();await page.locator('#access-token').fill(new URL(url).hash.slice(1));await page.locator('#access-auth').click();await page.waitForFunction(()=>!document.getElementById('authentication-dialog').open);await page.locator('#access-open').click();await page.waitForFunction(()=>!document.getElementById('access-save').disabled);
   assert.strictEqual(await page.locator('#access-token').inputValue(),'');
   await page.locator('#access-unrestricted').check();await page.locator('#access-save').click();await page.waitForFunction(()=>!document.getElementById('access-dialog').open);
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(state)).allowed_client_ips,[]);

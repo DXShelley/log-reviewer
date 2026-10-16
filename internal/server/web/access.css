@@ -1,4 +1,7 @@
 #access-dialog{width:min(560px,95vw)}
+#access-dialog.show-rules{width:min(980px,95vw)}
+#settings-rules-panel .rule-manager-body{min-height:0;height:min(620px,65dvh);max-height:none}
+@media(max-width:600px){#settings-rules-panel .rule-manager-body{height:auto;max-height:none}}
 #access-dialog .copy-body{display:flex;flex-direction:column;gap:10px;padding:18px;min-width:0}
 #access-dialog input[type=password],#access-ips{width:100%;min-width:0;box-sizing:border-box}
 #access-ips{resize:vertical;font-family:Consolas,monospace}
@@ -8,6 +11,11 @@
 #access-error{color:#af2634}
 #access-open{width:34px;height:34px;flex:none;padding:7px}
 #access-open svg{width:18px;height:18px}
+#authentication-dialog{width:min(420px,95vw);max-height:90dvh;overflow:auto}
+#authentication-dialog .copy-body{display:grid;gap:10px;padding:18px;min-width:0}
+#authentication-dialog input{width:100%;min-width:0;box-sizing:border-box}
+#authentication-dialog p{color:#af2634;margin:0;overflow-wrap:anywhere}
+.header-right .local{display:inline;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 #access-dialog[open]{display:flex;flex-direction:column;max-height:90vh;max-height:90dvh;overflow:hidden;padding:0}
 #access-dialog>.dialog-header,#access-dialog>.settings-tabs{flex:none}
 .settings-tabs{display:flex;gap:6px;padding:8px 18px;border-bottom:1px solid var(--border)}

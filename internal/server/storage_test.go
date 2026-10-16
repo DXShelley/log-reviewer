@@ -12,6 +12,61 @@ import (
 	"log-reviewer/internal/remote"
 )
 
+func TestUploadedFilesFollowStorageSettings(t *testing.T) {
+	s := New(t.TempDir())
+	defer s.Close()
+	s.remoteDir = filepath.Join(t.TempDir(), "initial")
+	handler := s.Handler("127.0.0.1:8765")
+	call := func(method, route, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, "http://127.0.0.1:8765/api/"+route, strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer "+s.Token())
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatalf("%s: %d %s", route, w.Code, w.Body.String())
+		}
+		return w
+	}
+	text := "2026-10-15 12:30:00 ERROR app : uploaded migration test\n"
+	w := call("POST", "upload?name=app.log", text)
+	var uploaded map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &uploaded); err != nil {
+		t.Fatal(err)
+	}
+	old := s.uploads[uploaded["id"]]
+	if !insidePath(s.remoteDir, old) {
+		t.Fatalf("upload outside configured storage: %s", old)
+	}
+	if err := s.Start([]string{old}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	s.jobs.Wait()
+	target := t.TempDir()
+	settings, _ := json.Marshal(importSettings{RemoteDirectory: target, FilePatterns: []string{"*.log"}})
+	call("PUT", "import-settings", string(settings))
+	moved := s.uploads[uploaded["id"]]
+	if !insidePath(target, moved) || moved == old {
+		t.Fatal(moved)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Fatal("old upload retained", err)
+	}
+	if data, err := os.ReadFile(moved); err != nil || string(data) != text {
+		t.Fatal(string(data), err)
+	}
+	if s.Report == nil || s.Report.Sources[0].Path != moved {
+		t.Fatal("report path not migrated")
+	}
+	call("GET", "details?group="+s.Report.Groups[0].ID, "")
+	w = call("POST", "upload?name=pasted.log", text+"pasted\n")
+	if err := json.Unmarshal(w.Body.Bytes(), &uploaded); err != nil {
+		t.Fatal(err)
+	}
+	if !insidePath(target, s.uploads[uploaded["id"]]) {
+		t.Fatal("new upload ignored storage settings")
+	}
+}
+
 func TestStorageMigrationPreservesAnalysis(t *testing.T) {
 	s := New(t.TempDir())
 	defer s.Close()

@@ -21,7 +21,7 @@
  }
  async function refresh(id=selected){const data=await json('language-rules');entries=data.languages;const key=id==='$new'||entries.some(e=>e.rule.id===id)?id:entries.find(e=>e.rule.id==='java')?.rule.id||entries[0]?.rule.id;select(key)}
  function setPending(value){pending=value;el('save-language').disabled=value;el('restore-language').disabled=value;el('add-language').disabled=value;for(const field of fields)el('rule-'+field).disabled=value;el('language-list').inert=value}
- el('rules-toggle').onclick=async()=>{el('rule-manager').showModal();try{await refresh()}catch(e){showError(e)}};
+ document.addEventListener('rules-open',async()=>{try{await refresh()}catch(e){showError(e)}},true);
  el('close-rules').onclick=()=>el('rule-manager').close();
  el('add-language').onclick=()=>{if(!drafts.has('$new'))drafts.set('$new',{id:'',label:'',evidence:'',level:'ERROR'});select('$new');el('rule-id').focus()};
  for(const field of fields)el('rule-'+field).addEventListener('input',()=>{if(!selected)return;drafts.set(selected,readForm());el('rule-status').textContent='未保存';el('save-language').disabled=false;el('restore-language').disabled=selected==='$new';renderList()});
