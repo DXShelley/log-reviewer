@@ -20,7 +20,7 @@ import (
 	"log-reviewer/internal/server"
 )
 
-const version = "1.0.0"
+const version = "1.0.1"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -65,7 +65,7 @@ func run(args []string) error {
 	}
 }
 
-const help = `Log Reviewer 1.0.0 - local, streaming log classification
+const help = `Log Reviewer 1.0.1 - local, streaming log classification
 
   log-reviewer                              Open local GUI
   log-reviewer gui [--host 0.0.0.0] [--port 8765] [--no-browser] [files...]
@@ -97,12 +97,8 @@ func rules(path string) ([]logs.Rule, error) {
 	if path == "" {
 		return nil, nil
 	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
 	var r []logs.Rule
-	err = json.Unmarshal(b, &r)
+	err := logs.ReadJSON(path, &r)
 	return r, err
 }
 func analyze(args []string) error {
@@ -128,12 +124,8 @@ func analyze(args []string) error {
 		return err
 	}
 	if *languagePath != "" {
-		b, err := os.ReadFile(*languagePath)
-		if err != nil {
-			return err
-		}
 		var overrides []logs.LanguageRule
-		if err := json.Unmarshal(b, &overrides); err != nil {
+		if err := logs.ReadJSON(*languagePath, &overrides); err != nil {
 			return err
 		}
 		languages = append(languages, overrides...)

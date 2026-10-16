@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/pkg/sftp v1.13.11
 	golang.org/x/crypto v0.55.0
+	golang.org/x/text v0.41.0
 )
 
 require (

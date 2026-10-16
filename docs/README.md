@@ -7,6 +7,7 @@
 - [无图形环境、监听地址与访问](server-usage.md)
 - [SFTP 获取远程日志](sftp-usage.md)
 - [GUI 设置与三个文件入口](gui-settings.md)
+- [文件编码支持、组件选型与回归测试](file-encoding.md)
 
 ## 扩展与集成
 

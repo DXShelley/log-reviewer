@@ -33,7 +33,7 @@ func ExportTime(ctx context.Context, r *Report, source int, from, to string, w i
 	if err != nil {
 		return err
 	}
-	reader := bufio.NewReaderSize(f, 64*1024)
+	reader := bufio.NewReaderSize(textReader(f, f), 64*1024)
 	selected, continuation := false, false
 	for {
 		if err := ctx.Err(); err != nil {

@@ -123,7 +123,17 @@ func validatedFile(r *Report, si uint32) (ReadFile, error) {
 		f.Close()
 		return nil, fmt.Errorf("source changed since analysis: %s; analyze again", s.Path)
 	}
-	return f, nil
+	encoding := s.Encoding
+	if encoding == "" {
+		b := make([]byte, 64*1024)
+		n, readErr := f.ReadAt(b, 0)
+		if readErr != nil && readErr != io.EOF {
+			f.Close()
+			return nil, readErr
+		}
+		encoding = sourceEncoding(b[:n])
+	}
+	return &encodedFile{ReadFile: f, encoding: encoding}, nil
 }
 func (q *query) match(report *Report, r Record) (bool, error) {
 	g := q.groups[r.Group]
@@ -160,6 +170,7 @@ func (q *query) match(report *Report, r Record) (bool, error) {
 		if err != nil && err != io.EOF {
 			return false, err
 		}
+		b = fileText(f, b)
 		if q.Keyword != "" && !strings.Contains(strings.ToLower(string(b)), strings.ToLower(q.Keyword)) {
 			return false, nil
 		}
@@ -181,15 +192,16 @@ func (q *query) match(report *Report, r Record) (bool, error) {
 		}
 		return true, nil
 	}
-	reader := bufio.NewReaderSize(io.NewSectionReader(f, int64(r.Offset), int64(r.Length)), 64*1024)
+	reader := bufio.NewReaderSize(textReader(f, io.NewSectionReader(f, int64(r.Offset), int64(r.Length))), 64*1024)
 	keywordOK := q.Keyword == ""
 	regexOK := q.re == nil
 	needle := strings.ToLower(q.Keyword)
 	var prefix string
 	var regexLine []byte
+	decodeChunk := chunkText(nil)
 	for {
 		b, err := reader.ReadSlice('\n')
-		s := strings.ToLower(string(b))
+		s := strings.ToLower(string(decodeChunk(b, err != bufio.ErrBufferFull)))
 		if !keywordOK && strings.Contains(prefix+s, needle) {
 			keywordOK = true
 		}
@@ -397,7 +409,7 @@ func ReadDetail(r *Report, rec Record, g *Group, options ...ContextOptions) (Det
 	if err != nil && err != io.EOF {
 		return d, err
 	}
-	d.Text = string(b)
+	d.Text = string(fileText(f, b))
 	anchorStart, anchorEnd := int64(rec.Offset), int64(rec.Offset+rec.Length)
 	if context.Keyword != "" || context.Regex != "" {
 		var re *regexp.Regexp
@@ -531,7 +543,7 @@ func Export(r *Report, f Filter, w io.Writer) error {
 		if _, err := fmt.Fprintf(w, "\n--- %s | %s | %s:%d | %s ---\n", g.ID, g.Level, r.Sources[rec.Source].Path, rec.Line, stamp(rec.Time)); err != nil {
 			return err
 		}
-		_, err := io.Copy(w, io.NewSectionReader(src, int64(rec.Offset), int64(rec.Length)))
+		_, err := io.Copy(w, textReader(src, io.NewSectionReader(src, int64(rec.Offset), int64(rec.Length))))
 		return err
 	})
 }
