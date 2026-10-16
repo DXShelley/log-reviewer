@@ -1,0 +1,1 @@
+{"id":"c","evidence":"(?:AddressSanitizer:|UndefinedBehaviorSanitizer:|\\.c:\\d+)","start":"^(?:==\\d+==ERROR: AddressSanitizer:|SUMMARY: UndefinedBehaviorSanitizer:)","level":"ERROR"}

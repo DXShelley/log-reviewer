@@ -1,0 +1,1 @@
+{"id":"elixir","evidence":"(?:\\*\\* \\([\\w.]+Error\\)|\\.exs?:\\d+|GenServer .* terminating)","start":"^\\*\\* \\([\\w.]+Error\\)","level":"ERROR"}

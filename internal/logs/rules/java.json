@@ -1,0 +1,1 @@
+{"id":"java","evidence":"(?m)(?:\\b(?:java|javax|jakarta)\\.[\\w.]+(?:Exception|Error)|\\bat [\\w.$]+\\([^\\n]*\\.java:\\d+\\)|Exception in thread)","start":"^Exception in thread ","level":"ERROR"}

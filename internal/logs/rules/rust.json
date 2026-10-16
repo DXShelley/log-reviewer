@@ -1,0 +1,1 @@
+{"id":"rust","evidence":"(?:thread '[^']+' panicked at|\\.rs:\\d+:\\d+|error\\[E\\d+\\])","start":"^(?:thread '[^']+' panicked at|error\\[E\\d+\\])","level":"FATAL"}

@@ -1,0 +1,1 @@
+{"id":"php","evidence":"(?:PHP (?:Fatal error|Warning|Parse error|Notice)|\\.php(?: on line |:\\d+))","start":"^(?:PHP Fatal error|PHP Parse error):","level":"ERROR","warning":"^PHP (?:Warning|Notice|Deprecated):","root":"(?m)^PHP (?:Fatal error|Parse error):[^\\n]*"}

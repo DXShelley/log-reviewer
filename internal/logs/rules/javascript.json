@@ -1,0 +1,1 @@
+{"id":"javascript","evidence":"(?:\\bat [^\\n]*\\.(?:js|mjs|cjs):\\d+:\\d+|node:internal/|\\(node:\\d+\\))","start":"^\\(node:\\d+\\).*Warning:","level":"WARN","root":"(?m)^(?:\\w*Error):[^\\n]*$"}

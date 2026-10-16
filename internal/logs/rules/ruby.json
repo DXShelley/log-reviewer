@@ -1,0 +1,1 @@
+{"id":"ruby","evidence":"(?:\\.rb:\\d+:|\\(NoMethodError\\)|\\(ActiveRecord::[\\w]+\\))","start":"^[^\\n]+\\.rb:\\d+:in .*:.*\\([\\w:]+(?:Error|Exception)\\)","level":"ERROR"}

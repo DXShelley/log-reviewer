@@ -5,7 +5,7 @@
 
 [下载发行版](https://github.com/DXShelley/log-reviewer/releases) · [查看源码（dev）](https://github.com/DXShelley/log-reviewer/tree/dev) · [文档中心](docs/README.md) · [参与开发](CONTRIBUTING.md) · [安全报告](SECURITY.md)
 
-仓库默认 `main` 提供项目介绍和使用文档；完整 Go 源码、开发脚本和测试位于 `dev`，贡献代码请提交到 `dev`。可执行文件仅通过 GitHub Releases 分发，`dist/`、缓存和测试输出不得提交到任何分支。
+仓库默认 `main` 保留完整 Go 源码、模块文件、测试、构建脚本和文档，可直接克隆构建；日常开发和贡献 PR 使用 `dev`，验证后合并到 `main`。可执行文件仅通过 GitHub Releases 分发，`dist/`、缓存和测试输出不得提交到任何分支。
 
 当前版本 **v1.0.0**：整合统一 GUI 设置、本机与 SFTP 只读分析、跨入口内容去重及上传副本保护，完善安全访问与导出工作流；详见 [变更记录](docs/CHANGELOG.md)。
 
@@ -118,7 +118,7 @@ GUI「识别规则」按语言分别列出，可编辑、保存、恢复某种�
 
 构建需要 Go 1.25+，SFTP 使用 pkg/sftp 与 x/crypto/ssh，版本锁定在 go.mod/go.sum。运行仍是独立二进制，CGO 关闭。源码、文档、测试、样例、脚本都在 `dev` 分支；`main` 为交付说明面。第三方许可见 [依赖说明](docs/THIRD_PARTY_NOTICES.md)。
 
-开发前执行 `git switch dev`。`main` 只包含交付说明、样例和维护入口；六个平台二进制仅通过 GitHub Releases 分发。
+开发前执行 `git switch dev`。`main` 保留完整、可构建的 Go 项目；六个平台二进制仅通过 GitHub Releases 分发。
 
 ```powershell
 go test ./...

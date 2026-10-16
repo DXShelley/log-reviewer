@@ -1,0 +1,1 @@
+{"id":"python","evidence":"(?:Traceback \\(most recent call last\\):|File \"[^\"]+\\.py\", line \\d+|\\b(?:DeprecationWarning|RuntimeWarning|UserWarning):)","start":"^Traceback \\(most recent call last\\):","level":"ERROR","warning":"^[^\\n]*\\.py:\\d+: (?:\\w+Warning):","root":"(?m)^\\w*(?:Error|Exception):[^\\n]*$"}

@@ -2,7 +2,7 @@
 
 ## 分支与目录
 
-`dev` 是完整源码分支，也是贡献 PR 的目标；GitHub 默认分支 `main` 提供介绍、使用文档和维护入口。查看代码请切换至 [dev](https://github.com/DXShelley/log-reviewer/tree/dev)。所有分支均禁止提交 `dist/`、可执行文件、依赖安装目录、缓存和测试报告，二进制仅作为 GitHub Release assets 发布。
+`dev` 是日常开发分支，也是贡献 PR 的目标；GitHub 默认分支 `main` 保留完整 Go 项目，包括 `go.mod`、`go.sum`、源码、测试、构建脚本和文档，验证后从 `dev` 合并。两分支均可直接构建。所有分支均禁止提交 `dist/`、可执行文件、依赖安装目录、缓存和测试报告，二进制仅作为 GitHub Release assets 发布。
 
 | 目录 | 用途 |
 | --- | --- |
@@ -45,7 +45,7 @@ HTTPS、HTTP 兼容、证书信任、TLS 版本、token 和 IP 白名单的用�
 
 ## 自动化与发布
 
-- 开发 CI 在 `dev` 的 push/PR 上运行 Linux、Windows、macOS 的 Go 测试、vet 和格式检查，并检查模块完整性。
+- Go CI 在 `dev` 和 `main` 的 push/PR 上运行 Linux、Windows、macOS 的 Go 测试、vet 和格式检查，并检查模块完整性。
 - 交付 CI 在 `main` 上检查未跟踪构建产物，并验证文档链接。
 - 发布通过 GitHub Release 附加六个平台二进制、SHA256 和第三方许可；已有标签不覆盖。
 - Dependabot 针对 `dev` 更新 Go 模块、针对相关分支更新 GitHub Actions。

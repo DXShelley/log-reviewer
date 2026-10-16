@@ -1,0 +1,1 @@
+{"id":"swift","evidence":"(?:\\.swift:\\d+|Swift/[\\w.]+:.*Fatal error:)","start":"^.*\\.swift:\\d+: Fatal error:","level":"FATAL"}

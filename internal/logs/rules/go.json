@@ -1,0 +1,1 @@
+{"id":"go","evidence":"(?m)(?:^panic:|^goroutine \\d+ \\[|\\.go:\\d+|^fatal error:)","start":"^(?:panic:|fatal error:)","level":"FATAL","root":"(?m)^(?:panic:|fatal error:)[^\\n]*"}
