@@ -27,8 +27,18 @@ async function main(){
   fs.mkdirSync(screenshots,{recursive:true});
   await page.locator('#highlight-keyword').fill('slow');await page.locator('#highlight-keyword').press('Enter');
   for(const layout of ['horizontal','vertical','rows','columns','top','dialog']){
-   await page.locator('#layout').selectOption(layout);await page.waitForFunction(()=>!document.querySelector('.event-tools'));await expand();const selector=['horizontal','vertical','dialog'].includes(layout)?'#event-dialog .log-text':'#event-viewer .log-text';await page.locator(selector).waitFor();assert((await page.locator(selector).innerText()).includes('slow'));assert(!(await page.locator('#occurrences').innerText()).includes('已在内容面板'));assert.equal(await page.locator('.occurrence.selected').count(),1);await page.waitForFunction(()=>document.querySelectorAll('mark.log-search-hit').length>0);assert.equal(await page.getByRole('searchbox',{name:'查找日志内容'}).inputValue(),'slow');await page.screenshot({path:path.join(screenshots,'layout-'+layout+'.png'),fullPage:true});if(['horizontal','vertical','dialog'].includes(layout))await page.locator('#event-dialog .dialog-header button').click();
+    await page.locator('#layout').selectOption(layout);await page.waitForFunction(()=>!document.querySelector('.event-tools'));await expand();const selector=['horizontal','vertical','dialog'].includes(layout)?'#event-dialog .log-text':'#event-viewer .log-text';await page.locator(selector).waitFor();assert((await page.locator(selector).innerText()).includes('slow'));assert(!(await page.locator('#occurrences').innerText()).includes('已在内容面板'));assert.equal(await page.locator('.occurrence.selected').count(),1);await page.waitForFunction(()=>document.querySelectorAll('mark.log-search-hit').length>0);assert.equal(await page.getByRole('searchbox',{name:'查找日志内容'}).inputValue(),'slow');await page.screenshot({path:path.join(screenshots,'layout-'+layout+'.png'),fullPage:true});if(['horizontal','vertical','dialog'].includes(layout))await page.getByRole('button',{name:'关闭日志内容',exact:true}).click();
   }
+  await page.locator('#layout').selectOption('dialog');await page.waitForFunction(()=>!document.querySelector('.event-tools'));await expand();
+  const eventNavigation=page.locator('#event-dialog .event-navigation');
+  assert((await eventNavigation.innerText()).includes('第 1 条'));
+  assert(await eventNavigation.getByRole('button',{name:'上一事件',exact:true}).isDisabled());
+  await eventNavigation.getByRole('button',{name:'下一事件',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('#event-dialog .event-position')?.textContent==='第 2 条'&&document.querySelector('#event-dialog .content-source .event-locator')?.textContent===document.querySelectorAll('#occurrences .occurrence')[1]?.dataset.eventId);
+  assert(await eventNavigation.getByRole('button',{name:'下一事件',exact:true}).isDisabled());
+  await eventNavigation.locator('button').nth(0).click();
+  await page.waitForFunction(()=>document.querySelector('#event-dialog .event-position')?.textContent==='第 1 条'&&document.querySelector('#event-dialog .content-source .event-locator')?.textContent===document.querySelectorAll('#occurrences .occurrence')[0]?.dataset.eventId);
+  await page.getByRole('button',{name:'关闭日志内容',exact:true}).click();
   await page.locator('#layout').selectOption('columns');await page.locator('#highlight-keyword').fill('');await page.locator('#highlight-keyword').press('Enter');
   const resolved=page.locator('.group-row').filter({hasText:'WARN'}).getByRole('checkbox');await resolved.check();await page.locator('#sort').selectOption('last');assert(await page.locator('.group-row').filter({hasText:'WARN'}).getByRole('checkbox').isChecked());
   await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.group-row').length===2);assert(await page.locator('.group-row').filter({hasText:'WARN'}).getByRole('checkbox').isChecked());
