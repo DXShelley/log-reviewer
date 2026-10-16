@@ -32,3 +32,9 @@
 .occurrence-meta .event-times{flex-basis:100%}
 .content-source>.event-locator{flex-basis:auto}
 .filters .highlight-field{min-width:150px}
+#event-dialog>.dialog-header{gap:8px;flex-wrap:wrap}
+.event-navigation{display:flex;align-items:center;justify-content:center;gap:6px;margin-left:auto}
+.event-navigation button{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;padding:5px 7px}
+.event-navigation svg{width:16px;height:16px}
+.event-position{min-width:58px;text-align:center;font-size:12px;font-variant-numeric:tabular-nums}
+@media(max-width:480px){#event-dialog>.dialog-header{padding:10px 8px;gap:4px}.event-navigation{gap:2px}.event-navigation button{padding:5px 3px;font-size:12px}.event-position{min-width:48px}}
